@@ -1,6 +1,8 @@
 #!/usr/bin/python
 
 import cgi
+import logging
+import logging.handlers
 import os
 import sys
 import pprint
@@ -23,9 +25,30 @@ key_file = key_dir + '/key'
 sreg_file = key_dir + '/sreg'
 store_dir = key_dir + '/sessions'
 
+def init_logger():
+    '''
+    Initializes the root logger to log to memory
+
+    The logs are dumped as required for debugging purposes
+    '''
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    mem_hdlr = logging.handlers.MemoryHandler(200)
+    mem_hdlr.shouldFlush = lambda x: False
+    stream_hdlr = logging.StreamHandler(sys.stdout)
+    stream_hdlr.setFormatter(logging.Formatter('%(relativeCreated)04d %(levelname)s: %(message)s'))
+
+    mem_hdlr.setTarget(stream_hdlr)
+    logger.addHandler(mem_hdlr)
+    return logger
+
+init_logger()
+
 if 'REQUEST_METHOD' not in os.environ:
     #pprint.pprint(dict(os.environ))
     pprint.pprint(config)
+    logging.shutdown()
     sys.exit()
 
 ostore = FileOpenIDStore(store_dir)
@@ -45,6 +68,7 @@ if not request:
     print "Content-Type: text/plain\n"
     pprint.pprint(dict(os.environ))
     pprint.pprint(config)
+    logging.shutdown()
     sys.exit()
 
 # Redirect to HTTPS if required
@@ -58,8 +82,6 @@ import hashlib
 from Cookie import SimpleCookie
 import fileinput
 
-#import logging
-#logging.basicConfig(level=logging.DEBUG, filename=key_dir+'/log', filemode='a')
 
 class OpenIDSessionCookie(SimpleCookie):
     def set_timeout(self, timeout=3600):
