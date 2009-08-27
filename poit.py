@@ -3,6 +3,7 @@
 import cgi
 import os
 import sys
+import pprint
 
 import cgitb; cgitb.enable()
 
@@ -22,6 +23,11 @@ key_file = key_dir + '/key'
 sreg_file = key_dir + '/sreg'
 store_dir = key_dir + '/sessions'
 
+if 'REQUEST_METHOD' not in os.environ:
+    #pprint.pprint(dict(os.environ))
+    pprint.pprint(config)
+    sys.exit()
+
 ostore = FileOpenIDStore(store_dir)
 oserver = OpenIDServer(ostore, 'http://iwa.yangman.ca/openid')
 
@@ -32,14 +38,13 @@ for key in fields.keys():
     query[key] = fields.getfirst(key)
 passphrase = query.pop('passphrase', None)
 
-
 # Decode request
 request = oserver.decodeRequest(query)
-    
 
 if not request:
     print "Content-Type: text/plain\n"
-    print os.environ
+    pprint.pprint(dict(os.environ))
+    pprint.pprint(config)
     sys.exit()
 
 # Redirect to HTTPS if required
