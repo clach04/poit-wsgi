@@ -17,13 +17,13 @@ import cgitb; cgitb.enable()
 py_version = sys.version_info[:2]
 if py_version[0] == 3:
     import configparser
+    from http.cookies import SimpleCookie
 elif py_version[1] >= 6:
     import ConfigParser as configparser
+    from Cookie import SimpleCookie
 else:
-    print 'unsupported version of Python'
+    print('unsupported version of Python')
     sys.exit(1)
-
-import urllib
 
 import openid
 from openid.server import server
@@ -86,7 +86,6 @@ def init_config_file():
 # CGI functions
 
 import hashlib
-from Cookie import SimpleCookie
 import fileinput
 
 
@@ -95,7 +94,7 @@ class OpenIDSessionCookie(SimpleCookie):
         '''Set expiration of cookie timeout seconds into the future
         If 0, expire this cookie
         '''
-        for o in self.itervalues():
+        for o in self.values():
             o['expires'] = timeout
             o['secure'] = True
             o['path'] = '/openid'
@@ -189,19 +188,19 @@ def check_passphrase():
 
     else:
         import re
-        print "Content-Type: text/html\n"
-        print '''<html><head><title>OpenID authenticate</title></head>
+        print("Content-Type: text/html\n")
+        print('''<html><head><title>OpenID authenticate</title></head>
             <body>
             <form action="%s" method="post">
                 <input type="password" name="passphrase" size="20" />
-                <button type="submit">Authorize</button>''' % (re.sub(r'^http:', 'https:', os.environ['REDIRECT_URL']),)
+                <button type="submit">Authorize</button>''' % (re.sub(r'^http:', 'https:', os.environ['REDIRECT_URL']),))
 
-        for p in query.iteritems():
-            print '<input type="hidden" name="%s" value="%s" />' % p
+        for p in query.items():
+            print('<input type="hidden" name="%s" value="%s" />' % p)
 
-        print '</form>'
-        print '<a href="%s">Reject</a>' % (request.getCancelURL(),)
-        print '</body></html>'
+        print('</form>')
+        print('<a href="%s">Reject</a>' % (request.getCancelURL(),))
+        print('</body></html>')
         sys.exit()
 
     return False
@@ -221,8 +220,8 @@ def handle_login(request, passphrase):
 
 def handle_nonopenid(query, passphrase=None):
     """Handle non-OpenID requests"""
-    print 'Content-Type: text/plain\n'
-    print os.environ
+    print('Content-Type: text/plain\n')
+    print(os.environ)
     sys.exit()
 
 
@@ -255,7 +254,7 @@ def cgi_main():
     # Get CGI fields and put into a dict
     fields = cgi.FieldStorage(keep_blank_values = True)
     query = {}
-    for key in fields.keys():
+    for key in list(fields.keys()):
         query[key] = fields.getfirst(key)
     passphrase = query.pop('passphrase', None)
 
@@ -263,7 +262,7 @@ def cgi_main():
     request = oserver.decodeRequest(query)
 
     if not request:
-        print "Content-Type: text/plain\n"
+        print("Content-Type: text/plain\n")
         pprint.pprint(dict(os.environ))
         pprint.pprint(config_file)
         logging.shutdown()
@@ -271,7 +270,7 @@ def cgi_main():
 
     # Redirect to HTTPS if required
     if type(request) == CheckIDRequest and ('HTTPS' not in os.environ or os.environ['HTTPS'] != 'on'):
-        print "Location: https://%s%s\n" % (os.environ['HTTP_HOST'], os.environ['REQUEST_URI'])
+        print("Location: https://%s%s\n" % (os.environ['HTTP_HOST'], os.environ['REQUEST_URI']))
         return
 
     cookie = OpenIDSessionCookie(os.environ.get('HTTP_COOKIE', ''))
@@ -297,8 +296,8 @@ def cgi_main():
         try:
             response = oserver.handleRequest(request)
         except NotImplementedError:
-            print 'Status: 406 Not OpenID request'
-            print 'Content-Type: text/plain\n'
+            print('Status: 406 Not OpenID request')
+            print('Content-Type: text/plain\n')
             return
 
 
@@ -309,11 +308,11 @@ def cgi_main():
 
 
     # Output
-    for header in response.headers.iteritems():
-        print '%s: %s' % header
-    print cookie.output()
-    print
-    print response.body
+    for header in response.headers.items():
+        print('%s: %s' % header)
+    print(cookie.output())
+    print()
+    print(response.body)
 
 #######################################
 # Commandline mode functions
