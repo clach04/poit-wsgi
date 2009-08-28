@@ -4,6 +4,7 @@ import cgi
 import logging
 import logging.handlers
 import os
+import re
 import sys
 import pprint
 
@@ -30,13 +31,14 @@ from openid.server.server import Server as OpenIDServer, CheckIDRequest, CheckAu
 from openid.extensions.sreg import SRegRequest, SRegResponse
 from openid.store.filestore import FileOpenIDStore
 
-# Initialize paths and server object
-key_dir = os.path.expanduser('~/.openid')
-key_file = key_dir + '/key'
-sreg_file = key_dir + '/sreg'
-store_dir = key_dir + '/sessions'
-
 config_file = None
+auth_key = None
+query = {}
+cookie = None
+passphrase = None
+
+#######################################
+# Common functions
 
 def init_logger():
     '''
@@ -79,44 +81,9 @@ def init_config_file():
         break
     config_file.read(config_file_path)
 
-
-init_logger()
-
-try:
-    init_config_file()
-except configparser.ParsingError as err:
-    logging.error('Unable to parse config file: {0}'.format(err))
-
-if 'REQUEST_METHOD' not in os.environ:
-    logging.shutdown()
-    sys.exit()
-
-ostore = FileOpenIDStore(store_dir)
-oserver = OpenIDServer(ostore, 'http://iwa.yangman.ca/openid')
-
-# Get CGI fields and put into a dict
-fields = cgi.FieldStorage(keep_blank_values = True)
-query = {}
-for key in fields.keys():
-    query[key] = fields.getfirst(key)
-passphrase = query.pop('passphrase', None)
-
-# Decode request
-request = oserver.decodeRequest(query)
-
-if not request:
-    print "Content-Type: text/plain\n"
-    pprint.pprint(dict(os.environ))
-    pprint.pprint(config_file)
-    logging.shutdown()
-    sys.exit()
-
-# Redirect to HTTPS if required
-if type(request) == CheckIDRequest and ('HTTPS' not in os.environ or os.environ['HTTPS'] != 'on'):
-    print "Location: https://%s%s\n" % (os.environ['HTTP_HOST'], os.environ['REQUEST_URI'])
-    sys.exit()
     
-#-------------------------------------
+#######################################
+# CGI functions
 
 import hashlib
 from Cookie import SimpleCookie
@@ -149,22 +116,17 @@ class OpenIDSessionCookie(SimpleCookie):
 
 class OpenIDKey:
     '''OpenID authentication keys stored locally'''
-    def __init__(self, keyfile):
-        self.__allowed_ids = []
-        try:
-            f = fileinput.FileInput(keyfile)
-            self.md5 = f.readline().rstrip()
-            self.sha512 = f.readline().rstrip()
-
-            for line in f:
-                self.__allowed_ids.append(line.rstrip())
-            f.close()
-        except:
-            self.md5 = None
-            self.sha512 = None
+    def __init__(self):
+        # Load passphrase hashes
+        # TODO: handle exceptions
+        global config_file
+        self.md5 = config_file.get('passphrase', 'md5')
+        self.sha512 = config_file.get('passphrase', 'sha512')
+        self.__allowed_ids = config_file.options('ids')
+        logging.debug('Allowed IDs: ' + str(self.__allowed_ids))
 
     def valid_id(self, id):
-        return (id in self.__allowed_ids)
+        return (re.sub(r'^http[s]?://(.*[^/])[/]?$', r'\1', id, 1) in self.__allowed_ids)
         
     def validate(self, key):
         '''Validate a passphrase or cookie'''
@@ -211,11 +173,6 @@ class OpenIDKey:
 
         return cookie
     
-
-cookie = OpenIDSessionCookie(os.environ.get('HTTP_COOKIE', ''))
-
-# Read key from file
-auth_key = OpenIDKey(key_file)
 
 def check_passphrase():
     '''Ask for and validate passphrase'''
@@ -287,42 +244,100 @@ def handle_sreg(request, response):
         sreg_resp = SRegResponse.extractResponse(sreg_req, user_data)
         sreg_resp.toMessage(response.fields)
 
+def cgi_main():
+    global config_file
+    global query
+    global request
+    global passphrase
+    ostore = FileOpenIDStore(store_dir)
+    oserver = OpenIDServer(ostore, 'http://iwa.yangman.ca/openid')
+
+    # Get CGI fields and put into a dict
+    fields = cgi.FieldStorage(keep_blank_values = True)
+    query = {}
+    for key in fields.keys():
+        query[key] = fields.getfirst(key)
+    passphrase = query.pop('passphrase', None)
+
+    # Decode request
+    request = oserver.decodeRequest(query)
+
+    if not request:
+        print "Content-Type: text/plain\n"
+        pprint.pprint(dict(os.environ))
+        pprint.pprint(config_file)
+        logging.shutdown()
+        return
+
+    # Redirect to HTTPS if required
+    if type(request) == CheckIDRequest and ('HTTPS' not in os.environ or os.environ['HTTPS'] != 'on'):
+        print "Location: https://%s%s\n" % (os.environ['HTTP_HOST'], os.environ['REQUEST_URI'])
+        return
+
+    cookie = OpenIDSessionCookie(os.environ.get('HTTP_COOKIE', ''))
+
+    # Read key from file
+    global auth_key
+    auth_key = OpenIDKey()
+
+    response = None
+
+    if type(request) == CheckIDRequest:
+        # Reject if identity is not accepable
+        if not auth_key.valid_id(request.identity):
+            response = request.answer(False)
+        else:
+            response = check_session()
+            if not response and not request.immediate:
+                response = check_passphrase()
+
+            response = request.answer(response)
+            handle_sreg(request, response)
+    else:
+        try:
+            response = oserver.handleRequest(request)
+        except NotImplementedError:
+            print 'Status: 406 Not OpenID request'
+            print 'Content-Type: text/plain\n'
+            return
+
+
+    ostore.cleanup()
+
+    # encode response
+    response = oserver.encodeResponse(response)
+
+
+    # Output
+    for header in response.headers.iteritems():
+        print '%s: %s' % header
+    print cookie.output()
+    print
+    print response.body
+
+#######################################
+# Commandline mode functions
+
+def cli_main():
+    logging.shutdown()
+
 
 #-----------------------------
 
-response = None
+if __name__ == '__main__':
+    # Initialize paths and server object
+    key_dir = os.path.expanduser('~/.openid')
+    sreg_file = key_dir + '/sreg'
+    store_dir = key_dir + '/sessions'
 
-if type(request) == CheckIDRequest:
-    # Reject if identity is not accepable
-    if not auth_key.valid_id(request.identity):
-        response = request.answer(False)
-    else:
-        response = check_session()
-        if not response and not request.immediate:
-            response = check_passphrase()
+    init_logger()
 
-        response = request.answer(response)
-        handle_sreg(request, response)
-else:
     try:
-        response = oserver.handleRequest(request)
-    except NotImplementedError:
-        print 'Status: 406 Not OpenID request'
-        print 'Content-Type: text/plain\n'
-        import sys
-        sys.exit()
+        init_config_file()
+    except configparser.ParsingError as err:
+        logging.error('Unable to parse config file: {0}'.format(err))
 
-
-ostore.cleanup()
-
-# encode response
-response = oserver.encodeResponse(response)
-
-
-# Output
-for header in response.headers.iteritems():
-    print '%s: %s' % header
-print cookie.output()
-print
-print response.body
-
+    if 'REQUEST_METHOD' in os.environ:
+        cgi_main()
+    else:
+        cli_main()
