@@ -11,6 +11,17 @@ import cgitb; cgitb.enable()
 
 ###########################################
 
+##
+# Check Python version, and do version-specific imports
+py_version = sys.version_info[:2]
+if py_version[0] == 3:
+    import configparser
+elif py_version[1] >= 6:
+    import ConfigParser as configparser
+else:
+    print 'unsupported version of Python'
+    sys.exit(1)
+
 import urllib
 
 import openid
@@ -24,6 +35,8 @@ key_dir = os.path.expanduser('~/.openid')
 key_file = key_dir + '/key'
 sreg_file = key_dir + '/sreg'
 store_dir = key_dir + '/sessions'
+
+config_file = None
 
 def init_logger():
     '''
@@ -43,11 +56,38 @@ def init_logger():
     logger.addHandler(mem_hdlr)
     return logger
 
+def init_config_file():
+    '''
+    Find and read the configuration file
+
+    Searches the following locations in order until a valid config file is found:
+        1) ~/.poit
+        2) Directory of this script
+
+    Will not catch any exceptions thrown while parsing config file.
+    This should be done by the caller so that proper feedback can be given.
+    '''
+    global config_file
+    for dir in [os.path.expanduser('~/.poit'), '.']:
+        config_file_path = dir + '/poit.config'
+        if not os.path.exists(dir) or not os.path.exists(config_file_path):
+            logging.debug("`{0}' does not exist".format(config_file_path))
+            continue
+
+        logging.info('Configuration file: ' + config_file_path)
+        config_file = configparser.SafeConfigParser()
+        break
+    config_file.read(config_file_path)
+
+
 init_logger()
 
+try:
+    init_config_file()
+except configparser.ParsingError as err:
+    logging.error('Unable to parse config file: {0}'.format(err))
+
 if 'REQUEST_METHOD' not in os.environ:
-    #pprint.pprint(dict(os.environ))
-    pprint.pprint(config)
     logging.shutdown()
     sys.exit()
 
@@ -67,7 +107,7 @@ request = oserver.decodeRequest(query)
 if not request:
     print "Content-Type: text/plain\n"
     pprint.pprint(dict(os.environ))
-    pprint.pprint(config)
+    pprint.pprint(config_file)
     logging.shutdown()
     sys.exit()
 
