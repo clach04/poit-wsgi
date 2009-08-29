@@ -273,7 +273,9 @@ def check_passphrase(passphrase):
 
         print('</form>')
         print('<a href="%s">Reject</a>' % (request.getCancelURL(),))
-        print('</body></html>')
+        print('<pre>')
+        logging.shutdown()
+        print('</pre></body></html>')
         sys.exit()
 
     return False
