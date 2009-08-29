@@ -32,7 +32,6 @@ from openid.server.server import Server as OpenIDServer, CheckIDRequest, CheckAu
 from openid.extensions.sreg import SRegRequest, SRegResponse
 from openid.store.filestore import FileOpenIDStore
 
-config_file = None
 auth_key = None
 query = {}
 cookie = None
@@ -57,29 +56,6 @@ def init_logger():
     mem_hdlr.setTarget(stream_hdlr)
     logger.addHandler(mem_hdlr)
     return logger
-
-def init_config_file():
-    '''
-    Find and read the configuration file
-
-    Searches the following locations in order until a valid config file is found:
-        1) ~/.poit
-        2) Directory of this script
-
-    Will not catch any exceptions thrown while parsing config file.
-    This should be done by the caller so that proper feedback can be given.
-    '''
-    global config_file
-    for dir in [os.path.expanduser('~/.poit'), '.']:
-        config_file_path = dir + '/poit.config'
-        if not os.path.exists(dir) or not os.path.exists(config_file_path):
-            logging.debug("`{0}' does not exist".format(config_file_path))
-            continue
-
-        logging.info('Configuration file: ' + config_file_path)
-        config_file = configparser.SafeConfigParser()
-        break
-    config_file.read(config_file_path)
 
 
 class ConfigManager():
@@ -169,8 +145,8 @@ class ConfigManager():
         return self._parser.get("passphrase", hash)
 
     def force_https(self):
-        return config_file.has_option("security", "force_https") and \
-               config_file.getboolean("security", "force_https")
+        return self._parser.has_option("security", "force_https") and \
+               self._parser.getboolean("security", "force_https")
 
     
 #######################################
@@ -327,7 +303,6 @@ def handle_sreg(request, response):
         sreg_resp.toMessage(response.fields)
 
 def cgi_main(cfg):
-    global config_file
     global query
     global request
     ostore = FileOpenIDStore(cfg.session_dir)
@@ -350,7 +325,6 @@ def cgi_main(cfg):
     if not request:
         print("Content-Type: text/plain\n")
         pprint.pprint(dict(os.environ))
-        pprint.pprint(config_file)
         logging.shutdown()
         return
 
@@ -418,11 +392,6 @@ if __name__ == '__main__':
     sreg_file = key_dir + '/sreg'
 
     init_logger()
-
-    try:
-        init_config_file()
-    except configparser.ParsingError as err:
-        logging.error('Unable to parse config file: {0}'.format(err))
 
     if 'REQUEST_METHOD' in os.environ:
         try:
