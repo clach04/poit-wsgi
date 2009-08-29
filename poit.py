@@ -269,7 +269,10 @@ def cgi_main():
         return
 
     # Redirect to HTTPS if required
-    if type(request) == CheckIDRequest and ('HTTPS' not in os.environ or os.environ['HTTPS'] != 'on'):
+    if type(request) == CheckIDRequest and \
+            config_file.has_option("security", "force_https") and \
+            config_file.getboolean("security", "force_https") and \
+            ('HTTPS' not in os.environ or os.environ['HTTPS'] != 'on'):
         print("Location: https://%s%s\n" % (os.environ['HTTP_HOST'], os.environ['REQUEST_URI']))
         return
 
