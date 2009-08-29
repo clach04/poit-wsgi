@@ -149,13 +149,14 @@ class ConfigManager():
                 return False
         return True
 
+    def sreg_fields(self):
+        return dict(self._parser.items("sreg")) if self._parser.has_section("sreg") else None
 
     
 #######################################
 # CGI functions
 
 import hashlib
-import fileinput
 
 class CGIParser():
     '''Similar to cgi.FieldStorage, but specific to this script
@@ -318,22 +319,14 @@ def handle_nonopenid(query, passphrase=None):
     sys.exit()
 
 
-def handle_sreg(request, response):
+def handle_sreg(cfg, request, response):
     """Handle any sreg data requests"""
     sreg_req = SRegRequest.fromOpenIDRequest(request)
     # Extract information if required
-    if sreg_req.required or sreg_req.required:
-        import re
-        f = fileinput.FileInput(sreg_file)
-        p = re.compile('^(\w+):\s*(\S+)')
-        user_data = {}
-        for line in fileinput.input():
-            m = p.match(line)
-            if m: user_data[m.group(1)] = m.group(2)
-
-        # Extract the sreg data actually requested
-        #data = dict([(x, user_data[x]) for x in sreg_req.required + sreg_req.optional])
-        sreg_resp = SRegResponse.extractResponse(sreg_req, user_data)
+    if sreg_req.wereFieldsRequested():
+        fields = cfg.sreg_fields()
+        if not fields: return
+        sreg_resp = SRegResponse.extractResponse(sreg_req, cfg.sreg_fields())
         sreg_resp.toMessage(response.fields)
 
 def cgi_main(cfg):
@@ -383,7 +376,7 @@ def cgi_main(cfg):
                 #response = cfg.validate_passphrase(passphrase)
 
             response = request.answer(response)
-            handle_sreg(request, response)
+            handle_sreg(cfg, request, response)
     else:
         try:
             response = oserver.handleRequest(request)
