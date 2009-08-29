@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import cgi
+import exceptions
 import logging
 import logging.handlers
 import os
@@ -80,6 +81,85 @@ def init_config_file():
         config_file = configparser.SafeConfigParser()
         break
     config_file.read(config_file_path)
+
+
+class ConfigManager():
+    '''Manages configuration, profile and session information
+
+    User-controlled configurations are stored in a poit.cfg file, looked for in
+    ~/.poit and script directory, in that order.
+    '''
+
+    def check_session_dir(self):
+        '''Check that session storage directory exists has correct permissions'''
+        # TODO: sanity check permissions when pre-existing
+        if not os.path.exists(self.session_dir):
+            try:
+                os.makedirs(self.session_dir, 0700)
+            except OSError as e:
+                logging.error("Cannot create {dir}: {e}".format(self.session_dir, str(e)))
+                return False
+        return True
+
+    def __init__(self, config_mode=False):
+        '''Constructor
+
+        If config_mode is true, do not throw exceptions when file does not exist
+        '''
+        self.cfgfile = None
+        self.session_dir = None
+
+        self._keys_exist = False
+        self._dirty = False
+        self._parser = None
+
+        # Find and load configuration file
+        for dir in [os.path.expanduser('~/.poit'), '.']:
+            f = dir + "/poit.config"
+            if not os.path.exists(f):
+                logging.debug("`{0}' does not exist".format(f))
+                continue
+
+            self.cfgfile = f
+            break
+
+        if not (self.cfgfile or config_mode) :
+            logging.error("Configuration file not found")
+            raise exceptions.IOError("File not found")
+
+        self._parser = configparser.SafeConfigParser()
+        self._parser.read(self.cfgfile)
+
+        # Sanity check values
+        self._keys_exist = self._parser.has_option("passphrase", "md5") and \
+                           self._parser.has_option("passphrase", "sha512")
+
+        if not self._keys_exist:
+            logging.warning("Passphrase not set")
+
+        # Session folder
+        try:
+            self.session_dir = self._parser.get("session", "store_dir")
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            self.session_dir = os.path.expanduser("~/.cache/poit/")
+
+        if not config_mode and not self.check_session_dir():
+            raise exceptions.IOError("Session directory not writable: " + self.session_dir)
+
+    def __del__(self):
+        self.save()
+
+    def save(self):
+        '''Saves configuration to file. Assumes cfgfile is set.'''
+        if not self._dirty: return True
+        logging.info("Saving configuration to " + self.cfgfile)
+        self._parser.write(open(cfgfile, 'w'))
+
+    def validate_passphrase(self, passphrase):
+        if not self._keys_exist: return False
+        if hashlib.md5(passphrase).hexdigest() != self.md5: return False
+        if hashlib.sha512(passphrase).hexdigest() != self.sha512: return False
+        return True
 
     
 #######################################
