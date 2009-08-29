@@ -65,17 +65,6 @@ class ConfigManager():
     ~/.poit and script directory, in that order.
     '''
 
-    def check_session_dir(self):
-        '''Check that session storage directory exists has correct permissions'''
-        # TODO: sanity check permissions when pre-existing
-        if not os.path.exists(self.session_dir):
-            try:
-                os.makedirs(self.session_dir, 0700)
-            except OSError as e:
-                logging.error("Cannot create {dir}: {e}".format(self.session_dir, str(e)))
-                return False
-        return True
-
     def __init__(self, config_mode=False):
         '''Constructor
 
@@ -147,6 +136,18 @@ class ConfigManager():
     def force_https(self):
         return self._parser.has_option("security", "force_https") and \
                self._parser.getboolean("security", "force_https")
+
+    def check_session_dir(self):
+        '''Check that session storage directory exists has correct permissions'''
+        # TODO: sanity check permissions when pre-existing
+        if not os.path.exists(self.session_dir):
+            try:
+                os.makedirs(self.session_dir, 0700)
+            except OSError as e:
+                logging.error("Cannot create {dir}: {e}".format(self.session_dir, str(e)))
+                return False
+        return True
+
 
     
 #######################################
