@@ -36,7 +36,6 @@ config_file = None
 auth_key = None
 query = {}
 cookie = None
-passphrase = None
 
 #######################################
 # Common functions
@@ -136,6 +135,8 @@ class ConfigManager():
 
         if not self._keys_exist:
             logging.warning("Passphrase not set")
+        if not self._parser.has_section("ids"):
+            self._parser.add_section("ids")
 
         # Session folder
         try:
@@ -156,10 +157,16 @@ class ConfigManager():
         self._parser.write(open(cfgfile, 'w'))
 
     def validate_passphrase(self, passphrase):
-        if not self._keys_exist: return False
-        if hashlib.md5(passphrase).hexdigest() != self.md5: return False
-        if hashlib.sha512(passphrase).hexdigest() != self.sha512: return False
+        if not (self._keys_exist and passphrase): return False
+        if hashlib.md5(passphrase).hexdigest() != self._parser.get("passphrase", "md5"): return False
+        if hashlib.sha512(passphrase).hexdigest() != self._parser.get("passphrase", "sha512"): return False
         return True
+
+    def validate_id(self, id):
+        return (re.sub(r'^http[s]?://(.*[^/])[/]?$', r'\1', id, 1) in self._parser.options('ids'))
+
+    def get_passphrase_hash(self, hash):
+        return self._parser.get("passphrase", hash)
 
     
 #######################################
@@ -195,32 +202,14 @@ class OpenIDSessionCookie(SimpleCookie):
 
 class OpenIDKey:
     '''OpenID authentication keys stored locally'''
-    def __init__(self):
-        # Load passphrase hashes
-        # TODO: handle exceptions
-        global config_file
-        self.md5 = config_file.get('passphrase', 'md5')
-        self.sha512 = config_file.get('passphrase', 'sha512')
-        self.__allowed_ids = config_file.options('ids')
-        logging.debug('Allowed IDs: ' + str(self.__allowed_ids))
 
-    def valid_id(self, id):
-        return (re.sub(r'^http[s]?://(.*[^/])[/]?$', r'\1', id, 1) in self.__allowed_ids)
-        
+    def __init__(self, cfg):
+        self.cfg = cfg
+
     def validate(self, key):
         '''Validate a passphrase or cookie'''
         if type(key) == str:
-            if not (self.md5 and self.sha512): return False
-
-            h = hashlib.md5()
-            h.update(passphrase)
-            if h.hexdigest() != self.md5: return False
-
-            h = hashlib.sha512()
-            h.update(passphrase)
-            if h.hexdigest() != self.sha512: return False
-
-            return True
+            return self.cfg.validate_passphrase(key)
 
         elif type(key) == OpenIDSessionCookie:
             try:
@@ -241,9 +230,9 @@ class OpenIDKey:
         import random
         salt = ''.join([random.choice('0123456789abcdef') for x in range(40)])
         h = hashlib.sha1()
-        h.update(self.md5)
+        h.update(self.cfg.get_passphrase_hash("md5"))
         h.update(salt)
-        h.update(self.sha512)
+        h.update(self.cfg.get_passphrase_hash("sha512"))
         key = h.hexdigest()
 
         cookie = OpenIDSessionCookie()
@@ -253,7 +242,7 @@ class OpenIDKey:
         return cookie
     
 
-def check_passphrase():
+def check_passphrase(passphrase):
     '''Ask for and validate passphrase'''
     # Login attempt
     if passphrase:
@@ -323,13 +312,12 @@ def handle_sreg(request, response):
         sreg_resp = SRegResponse.extractResponse(sreg_req, user_data)
         sreg_resp.toMessage(response.fields)
 
-def cgi_main():
+def cgi_main(cfg):
     global config_file
     global query
     global request
-    global passphrase
-    ostore = FileOpenIDStore(store_dir)
-    oserver = OpenIDServer(ostore, 'http://iwa.yangman.ca/openid')
+    ostore = FileOpenIDStore(cfg.session_dir)
+    oserver = OpenIDServer(ostore)
 
     # Get CGI fields and put into a dict
     fields = cgi.FieldStorage(keep_blank_values = True)
@@ -364,18 +352,19 @@ def cgi_main():
 
     # Read key from file
     global auth_key
-    auth_key = OpenIDKey()
+    auth_key = OpenIDKey(cfg)
 
     response = None
 
     if type(request) == CheckIDRequest:
         # Reject if identity is not accepable
-        if not auth_key.valid_id(request.identity):
+        if not cfg.validate_id(request.identity):
             response = request.answer(False)
         else:
             response = check_session()
             if not response and not request.immediate:
-                response = check_passphrase()
+                response = check_passphrase(passphrase)
+                #response = cfg.validate_passphrase(passphrase)
 
             response = request.answer(response)
             handle_sreg(request, response)
@@ -404,7 +393,7 @@ def cgi_main():
 #######################################
 # Commandline mode functions
 
-def cli_main():
+def cli_main(cfg):
     logging.shutdown()
 
 
@@ -414,7 +403,6 @@ if __name__ == '__main__':
     # Initialize paths and server object
     key_dir = os.path.expanduser('~/.openid')
     sreg_file = key_dir + '/sreg'
-    store_dir = key_dir + '/sessions'
 
     init_logger()
 
@@ -424,6 +412,11 @@ if __name__ == '__main__':
         logging.error('Unable to parse config file: {0}'.format(err))
 
     if 'REQUEST_METHOD' in os.environ:
-        cgi_main()
+        try:
+            cfg = ConfigManager()
+        except configparser.ParsingError as e:
+            logging.error('Unable to parse config file: {0}'.format(err))
+        cgi_main(cfg)
     else:
-        cli_main()
+        cfg = ConfigManager(True)
+        cli_main(cfg)
