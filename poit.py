@@ -73,6 +73,7 @@ class ConfigManager():
         '''
         self.cfgfile = None
         self.session_dir = None
+        self.endpoint = None
 
         self._keys_exist = False
         self._dirty = False
@@ -103,6 +104,9 @@ class ConfigManager():
             logging.warning("Passphrase not set")
         if not self._parser.has_section("ids"):
             self._parser.add_section("ids")
+
+        if self._parser.has_option("session", "endpoint"):
+            self.endpoint = self._parser.get("session", "endpoint")
 
         # Session folder
         try:
@@ -189,6 +193,12 @@ class CGIParser():
                     else:
                         self.post[f[0]] = f[1]
         logging.debug("OpenID fields:\n" + pprint.pformat(self.openid))
+
+    def self_uri(self, cfg, https=False):
+        return "{scheme}://{server}{uri}".format(
+                    scheme = ("https" if (os.environ.get("HTTPS", None) == "on" or https) else "http"),
+                    server = os.environ["HTTP_HOST"],
+                    uri = os.environ["SCRIPT_NAME"])
 
 
 class OpenIDSessionCookie(SimpleCookie):
@@ -349,6 +359,13 @@ def cgi_main(cfg):
         pprint.pprint(dict(os.environ))
         logging.shutdown()
         return
+
+    # Make sure an endpoint is set
+    if not cfg.endpoint:
+        cfg.endpoint = cgi_request.self_uri(cfg, https=cfg.force_https())
+
+    logging.info("Endpoint: " + cfg.endpoint)
+    oserver.op_endpoint = cfg.endpoint
 
     # Redirect to HTTPS if required
     if type(request) == CheckIDRequest and \
