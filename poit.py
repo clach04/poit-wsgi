@@ -246,7 +246,7 @@ class OpenIDKey:
         return cookie
     
 
-def check_passphrase(passphrase):
+def check_passphrase(cfg, passphrase):
     '''Ask for and validate passphrase'''
     # Login attempt
     if passphrase:
@@ -261,12 +261,20 @@ def check_passphrase(passphrase):
 
     else:
         import re
+        if "REDIRECT_URL" in os.environ:
+            redirect = os.environ['REDIRECT_URL']
+            if cfg.force_https():
+                redirect = re.sub(r'^http:', 'https:', os.environ['REDIRECT_URL'])
+        else:
+            redirect = ("https" if os.environ.get("HTTPS", None) == "on" else "http") + \
+                       "://" + os.environ["HTTP_HOST"] + os.environ["SCRIPT_NAME"]
+
         print("Content-Type: text/html\n")
         print('''<html><head><title>OpenID authenticate</title></head>
             <body>
-            <form action="%s" method="post">
+            <form action="{0}" method="post">
                 <input type="password" name="passphrase" size="20" />
-                <button type="submit">Authorize</button>''' % (re.sub(r'^http:', 'https:', os.environ['REDIRECT_URL']),))
+                <button type="submit">Authorize</button>'''.format(redirect))
 
         for p in query.items():
             print('<input type="hidden" name="%s" value="%s" />' % p)
@@ -368,7 +376,7 @@ def cgi_main(cfg):
         else:
             response = check_session()
             if not response and not request.immediate:
-                response = check_passphrase(passphrase)
+                response = check_passphrase(cfg, passphrase)
                 #response = cfg.validate_passphrase(passphrase)
 
             response = request.answer(response)
