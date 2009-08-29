@@ -18,9 +18,11 @@ import cgitb; cgitb.enable()
 py_version = sys.version_info[:2]
 if py_version[0] == 3:
     import configparser
+    import urllib.parse as urlparse
     from http.cookies import SimpleCookie
 elif py_version[1] >= 6:
     import ConfigParser as configparser
+    import urlparse
     from Cookie import SimpleCookie
 else:
     print('unsupported version of Python')
@@ -33,7 +35,6 @@ from openid.extensions.sreg import SRegRequest, SRegResponse
 from openid.store.filestore import FileOpenIDStore
 
 auth_key = None
-query = {}
 cookie = None
 
 #######################################
@@ -156,6 +157,38 @@ class ConfigManager():
 import hashlib
 import fileinput
 
+class CGIParser():
+    '''Similar to cgi.FieldStorage, but specific to this script
+
+    Instanciate once only, as sys.stdin is read.
+     - OpenID fields are put into `openid' attribute.
+     - POST fields are kept in `post' attribute, with all OpenID fields filtered out
+     - Other GET fields are discarded
+     '''
+    def __init__(self):
+        self.openid = dict()
+        self.post = dict()
+
+        def _openid_field(pair):
+            return pair[0].startswith("openid.")
+
+        self.openid.update(filter(_openid_field,
+                                  urlparse.parse_qsl(os.environ["QUERY_STRING"],
+                                                     keep_blank_values = True)))
+
+        content_length = int(os.environ.get("CONTENT_LENGTH", 0))
+        if content_length:
+            content = sys.stdin.read(content_length)
+            if os.environ["CONTENT_TYPE"].startswith("application/x-www-form-urlencoded"):
+                fields = urlparse.parse_qsl(content)
+                for f in fields:
+                    logging.debug("Field: " + str(f))
+                    if _openid_field(f):
+                        self.openid[f[0]] = f[1]
+                    else:
+                        self.post[f[0]] = f[1]
+        logging.debug("OpenID fields:\n" + pprint.pformat(self.openid))
+
 
 class OpenIDSessionCookie(SimpleCookie):
     def set_timeout(self, timeout=3600):
@@ -223,12 +256,12 @@ class OpenIDKey:
         return cookie
     
 
-def check_passphrase(cfg, passphrase):
+def check_passphrase(cfg, cgi_request):
     '''Ask for and validate passphrase'''
     # Login attempt
-    if passphrase:
+    if "passphrase" in cgi_request.post:
         # Check hashes
-        if not auth_key.validate(passphrase):
+        if not auth_key.validate(cgi_request.post["passphrase"]):
             return False
 
         # Set cookie
@@ -253,8 +286,8 @@ def check_passphrase(cfg, passphrase):
                 <input type="password" name="passphrase" size="20" />
                 <button type="submit">Authorize</button>'''.format(redirect))
 
-        for p in query.items():
-            print('<input type="hidden" name="%s" value="%s" />' % p)
+        for (name, value) in cgi_request.openid.items():
+            print('<input type="hidden" name="{0}" value="{1}" />'.format(name, value))
 
         print('</form>')
         print('<a href="%s">Reject</a>' % (request.getCancelURL(),))
@@ -304,21 +337,16 @@ def handle_sreg(request, response):
         sreg_resp.toMessage(response.fields)
 
 def cgi_main(cfg):
-    global query
     global request
     ostore = FileOpenIDStore(cfg.session_dir)
     oserver = OpenIDServer(ostore)
 
     # Get CGI fields and put into a dict
-    fields = cgi.FieldStorage(keep_blank_values = True)
-    query = {}
-    for key in list(fields.keys()):
-        query[key] = fields.getfirst(key)
-    passphrase = query.pop('passphrase', None)
+    cgi_request = CGIParser()
 
     # Decode request
     try:
-        request = oserver.decodeRequest(query)
+        request = oserver.decodeRequest(cgi_request.openid)
     except server.ProtocolError as err:
         logging.warn("Not an OpenID request: " + str(err))
         request = None
@@ -351,7 +379,7 @@ def cgi_main(cfg):
         else:
             response = check_session()
             if not response and not request.immediate:
-                response = check_passphrase(cfg, passphrase)
+                response = check_passphrase(cfg, cgi_request)
                 #response = cfg.validate_passphrase(passphrase)
 
             response = request.answer(response)
