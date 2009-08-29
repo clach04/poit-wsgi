@@ -259,7 +259,11 @@ def cgi_main():
     passphrase = query.pop('passphrase', None)
 
     # Decode request
-    request = oserver.decodeRequest(query)
+    try:
+        request = oserver.decodeRequest(query)
+    except server.ProtocolError as err:
+        logging.warn("Not an OpenID request: " + str(err))
+        request = None
 
     if not request:
         print("Content-Type: text/plain\n")
