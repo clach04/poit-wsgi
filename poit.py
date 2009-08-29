@@ -168,6 +168,10 @@ class ConfigManager():
     def get_passphrase_hash(self, hash):
         return self._parser.get("passphrase", hash)
 
+    def force_https(self):
+        return config_file.has_option("security", "force_https") and \
+               config_file.getboolean("security", "force_https")
+
     
 #######################################
 # CGI functions
@@ -342,8 +346,7 @@ def cgi_main(cfg):
 
     # Redirect to HTTPS if required
     if type(request) == CheckIDRequest and \
-            config_file.has_option("security", "force_https") and \
-            config_file.getboolean("security", "force_https") and \
+            cfg.force_https() and \
             ('HTTPS' not in os.environ or os.environ['HTTPS'] != 'on'):
         print("Location: https://%s%s\n" % (os.environ['HTTP_HOST'], os.environ['REQUEST_URI']))
         return
