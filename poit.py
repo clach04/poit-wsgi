@@ -42,23 +42,27 @@ cookie = None
 #######################################
 # Common functions
 
-def init_logger():
-    '''
-    Initializes the root logger to log to memory
+class BufferLogger(logging.Logger):
+    '''Logger which outputs only when explicitly told to do so'''
+    def __init__(self, name):
+        logging.Logger.__init__(self, name)
+        self._handler = logging.handlers.MemoryHandler(200)
+        self._handler.shouldFlush = lambda x: False
+        self._formatter = logging.Formatter("%(relativeCreated)04d %(levelname)s: %(message)s")
+        self.addHandler(self._handler)
 
-    The logs are dumped as required for debugging purposes
-    '''
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    def flush(self, file=sys.stdout):
+        target = logging.StreamHandler(file)
+        target.setFormatter(self._formatter)
+        self._handler.setTarget(target)
+        self._handler.flush()
+        target.flush()
+        self._handler.setTarget(None)
 
-    mem_hdlr = logging.handlers.MemoryHandler(200)
-    mem_hdlr.shouldFlush = lambda x: False
-    stream_hdlr = logging.StreamHandler(sys.stdout)
-    stream_hdlr.setFormatter(logging.Formatter('%(relativeCreated)04d %(levelname)s: %(message)s'))
-
-    mem_hdlr.setTarget(stream_hdlr)
-    logger.addHandler(mem_hdlr)
-    return logger
+# Initialize a global Logger instance
+logging.setLoggerClass(BufferLogger)
+logger = logging.getLogger("buffered")
+logger.setLevel(logging.DEBUG)
 
 
 class ConfigManager():
@@ -89,14 +93,14 @@ class ConfigManager():
                   os.path.expanduser("~/.poit.conf"),
                   "./poit.conf"]:
             if not os.path.exists(f):
-                logging.debug("`{0}' does not exist".format(f))
+                logger.debug("`{0}' does not exist".format(f))
                 continue
 
             self.cfgfile = f
             break
 
         if not (self.cfgfile or config_mode) :
-            logging.error("Configuration file not found")
+            logger.error("Configuration file not found")
             raise exceptions.IOError("No configuration file found")
 
         self._parser = configparser.SafeConfigParser()
@@ -107,7 +111,7 @@ class ConfigManager():
                            self._parser.has_option("passphrase", "sha512")
 
         if not self._keys_exist:
-            logging.warning("Passphrase not set")
+            logger.warning("Passphrase not set")
         if not self._parser.has_section("ids"):
             self._parser.add_section("ids")
 
@@ -132,7 +136,7 @@ class ConfigManager():
     def save(self):
         '''Saves configuration to file. Assumes cfgfile is set.'''
         if not self._dirty: return True
-        logging.info("Saving configuration to " + self.cfgfile)
+        logger.info("Saving configuration to " + self.cfgfile)
         self._parser.write(open(cfgfile, 'w'))
 
     def validate_passphrase(self, passphrase):
@@ -158,7 +162,7 @@ class ConfigManager():
             try:
                 os.makedirs(self.session_dir, 0700)
             except OSError as e:
-                logging.error("Cannot create {dir}: {e}".format(self.session_dir, str(e)))
+                logger.error("Cannot create {dir}: {e}".format(self.session_dir, str(e)))
                 return False
         return True
 
@@ -182,7 +186,7 @@ class CGIParser():
         self.post = dict()
         self.get = dict()
 
-        logging.debug("env:\n" + pprint.pformat(dict(os.environ)))
+        logger.debug("env:\n" + pprint.pformat(dict(os.environ)))
 
         # Process openid keys from GET fields iff it is not a POST request
         #  Section 4.1.2 of spec
@@ -192,14 +196,14 @@ class CGIParser():
                 if use_get: self.openid[key] = val
             else:
                 self.get[key] = val
-        logging.debug("GET fields:\n" + pprint.pformat(self.get))
+        logger.debug("GET fields:\n" + pprint.pformat(self.get))
 
         # FIXME: This needs to be more robust
         content_length = int(os.environ.get("CONTENT_LENGTH", 0))
         if content_length:
             content = sys.stdin.read(content_length)
-            logging.debug("Content-Type: " + os.environ["CONTENT_TYPE"])
-            logging.debug("data:\n" + content)
+            logger.debug("Content-Type: " + os.environ["CONTENT_TYPE"])
+            logger.debug("data:\n" + content)
             if os.environ["CONTENT_TYPE"].startswith("application/x-www-form-urlencoded"):
                 fields = urlparse.parse_qsl(content)
                 for (key, val) in fields:
@@ -207,9 +211,9 @@ class CGIParser():
                         self.openid[key] = val
                     else:
                         self.post[key] = val
-        logging.debug("POST fields:\n" + pprint.pformat(self.post))
+        logger.debug("POST fields:\n" + pprint.pformat(self.post))
 
-        logging.debug("OpenID fields:\n" + pprint.pformat(self.openid))
+        logger.debug("OpenID fields:\n" + pprint.pformat(self.openid))
 
     def self_uri(self, cfg, https=False):
         return "{scheme}://{server}{uri}".format(
@@ -290,17 +294,17 @@ def check_passphrase(cfg, cgi_request):
     if "passphrase" in cgi_request.post:
         # Check hashes
         if not auth_key.validate(cgi_request.post["passphrase"]):
-            logging.debug("Passphrase rejected")
+            logger.debug("Passphrase rejected")
             return False
 
         # Set cookie
-        logging.debug("Passphrase accepted")
+        logger.debug("Passphrase accepted")
         global cookie
         cookie = auth_key.cookie()
         return True
 
     else:
-        logging.info("Prompt for passphrase")
+        logger.info("Prompt for passphrase")
         import re
         if "REDIRECT_URL" in os.environ:
             redirect = os.environ['REDIRECT_URL']
@@ -325,7 +329,7 @@ def check_passphrase(cfg, cgi_request):
 
         if cfg.debug:
             print('<pre>')
-            logging.shutdown()
+            logger.flush()
             print('</pre></body></html>')
 
         sys.exit()
@@ -363,20 +367,20 @@ def cgi_main(cfg):
     if not cfg.endpoint:
         cfg.endpoint = cgi_request.self_uri(cfg, https=cfg.force_https())
 
-    logging.debug("Endpoint: " + cfg.endpoint)
+    logger.debug("Endpoint: " + cfg.endpoint)
     oserver = OpenIDServer(ostore, cfg.endpoint)
-    logging.debug("Initialized server")
+    logger.debug("Initialized server")
 
     # Decode request
     try:
         request = oserver.decodeRequest(cgi_request.openid)
     except server.ProtocolError as err:
-        logging.warn("Not an OpenID request: " + str(err))
+        logger.warn("Not an OpenID request: " + str(err))
         request = None
 
     if not request:
         print("Content-Type: text/plain\n")
-        logging.shutdown()
+        logger.flush()
         return
 
     # Redirect to HTTPS if required
@@ -399,7 +403,7 @@ def cgi_main(cfg):
     if type(request) == CheckIDRequest:
         # Reject if identity is not accepable
         if not cfg.validate_id(request.identity):
-            logging.info("Invalid ID: " + request.identity)
+            logger.info("Invalid ID: " + request.identity)
             response = request.answer(False)
         else:
             response = check_session()
@@ -407,12 +411,12 @@ def cgi_main(cfg):
                 response = check_passphrase(cfg, cgi_request)
                 #response = cfg.validate_passphrase(passphrase)
 
-            logging.info("Session validation: " + ("SUCCESS" if response else "FAILURE"))
+            logger.info("Session validation: " + ("SUCCESS" if response else "FAILURE"))
 
             response = request.answer(response)
             handle_sreg(cfg, request, response)
 
-            logging.debug("Response:\n" + response.encodeToKVForm())
+            logger.debug("Response:\n" + response.encodeToKVForm())
     else:
         try:
             response = oserver.handleRequest(request)
@@ -441,7 +445,7 @@ def cgi_main(cfg):
 
     if cfg.debug:
         print("=== LOG ===")
-        logging.shutdown()
+        logger.flush()
         if "location" in response.headers:
             print('<a href="{0}">Proceed</a>'.format(response.headers["location"]))
         print("</pre></body></html>")
@@ -450,19 +454,17 @@ def cgi_main(cfg):
 # Commandline mode functions
 
 def cli_main(cfg):
-    logging.shutdown()
+    logger.flush()
 
 
 #-----------------------------
 
 if __name__ == '__main__':
-    init_logger()
-
     if 'REQUEST_METHOD' in os.environ:
         try:
             cfg = ConfigManager()
         except configparser.ParsingError as e:
-            logging.error('Unable to parse config file: {0}'.format(err))
+            logger.error('Unable to parse config file: {0}'.format(err))
         cgi_main(cfg)
     else:
         cfg = ConfigManager(True)
