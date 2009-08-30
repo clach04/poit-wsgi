@@ -74,6 +74,7 @@ class ConfigManager():
         self.cfgfile = None
         self.session_dir = None
         self.endpoint = None
+        self.debug = False
 
         self._keys_exist = False
         self._dirty = False
@@ -107,6 +108,9 @@ class ConfigManager():
 
         if self._parser.has_option("session", "endpoint"):
             self.endpoint = self._parser.get("session", "endpoint")
+
+        if self._parser.has_option("ui", "debug"):
+            self.debug = self._parser.getboolean("ui", "debug")
 
         # Session folder
         try:
@@ -302,9 +306,12 @@ def check_passphrase(cfg, cgi_request):
 
         print('</form>')
         print('<a href="%s">Reject</a>' % (request.getCancelURL(),))
-        print('<pre>')
-        logging.shutdown()
-        print('</pre></body></html>')
+
+        if cfg.debug:
+            print('<pre>')
+            logging.shutdown()
+            print('</pre></body></html>')
+
         sys.exit()
 
     return False
@@ -342,10 +349,17 @@ def handle_sreg(cfg, request, response):
 def cgi_main(cfg):
     global request
     ostore = FileOpenIDStore(cfg.session_dir)
-    oserver = OpenIDServer(ostore)
 
     # Get CGI fields and put into a dict
     cgi_request = CGIParser()
+
+    # Make sure an endpoint is set
+    if not cfg.endpoint:
+        cfg.endpoint = cgi_request.self_uri(cfg, https=cfg.force_https())
+
+    logging.info("Endpoint: " + cfg.endpoint)
+    oserver = OpenIDServer(ostore, cfg.endpoint)
+    logging.info("Initialized server")
 
     # Decode request
     try:
@@ -359,13 +373,6 @@ def cgi_main(cfg):
         pprint.pprint(dict(os.environ))
         logging.shutdown()
         return
-
-    # Make sure an endpoint is set
-    if not cfg.endpoint:
-        cfg.endpoint = cgi_request.self_uri(cfg, https=cfg.force_https())
-
-    logging.info("Endpoint: " + cfg.endpoint)
-    oserver.op_endpoint = cfg.endpoint
 
     # Redirect to HTTPS if required
     if type(request) == CheckIDRequest and \
@@ -410,11 +417,22 @@ def cgi_main(cfg):
 
 
     # Output
+    if cfg.debug:
+        print('Content-Type: text/html\n')
+        print('<html><body><pre>')
+
     for header in response.headers.items():
         print('%s: %s' % header)
     print(cookie.output())
     print()
     print(response.body)
+
+    if cfg.debug:
+        print("=== LOG ===")
+        logging.shutdown()
+        if "location" in response.headers:
+            print('<a href="{0}">Proceed</a>'.format(response.headers["location"]))
+        print("</pre></body></html>")
 
 #######################################
 # Commandline mode functions
