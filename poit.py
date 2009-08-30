@@ -185,12 +185,17 @@ class CGIParser():
 
         logging.debug("env:\n" + pprint.pformat(dict(os.environ)))
 
+        # Process openid keys from GET fields iff it is not a POST request
+        #  Section 4.1.2 of spec
+        use_get = os.environ["REQUEST_METHOD"] != "POST"
         for (key, val) in urlparse.parse_qsl(os.environ["QUERY_STRING"], keep_blank_values = True):
             if key.startswith("openid."):
-                self.openid[key] = val
+                if use_get: self.openid[key] = val
             else:
-                self.post[key] = val
+                self.get[key] = val
+        logging.debug("GET fields:\n" + pprint.pformat(self.get))
 
+        # FIXME: This needs to be more robust
         content_length = int(os.environ.get("CONTENT_LENGTH", 0))
         if content_length:
             content = sys.stdin.read(content_length)
@@ -203,8 +208,8 @@ class CGIParser():
                         self.openid[key] = val
                     else:
                         self.post[key] = val
-        logging.debug("GET fields:\n" + pprint.pformat(self.get))
         logging.debug("POST fields:\n" + pprint.pformat(self.post))
+
         logging.debug("OpenID fields:\n" + pprint.pformat(self.openid))
 
     def self_uri(self, cfg, https=False):
