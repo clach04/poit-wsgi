@@ -183,26 +183,23 @@ class CGIParser():
         self.post = dict()
         self.get = dict()
 
-        def _openid_field(pair):
-            return pair[0].startswith("openid.")
 
-        for f in urlparse.parse_qsl(os.environ["QUERY_STRING"], keep_blank_values = True):
-            if _openid_field(f):
-                self.openid[f[0]] = f[1]
+        for (key, val) in urlparse.parse_qsl(os.environ["QUERY_STRING"], keep_blank_values = True):
+            if key.startswith("openid."):
+                self.openid[key] = val
             else:
-                self.post[f[0]] = f[1]
+                self.post[key] = val
 
         content_length = int(os.environ.get("CONTENT_LENGTH", 0))
         if content_length:
             content = sys.stdin.read(content_length)
             if os.environ["CONTENT_TYPE"].startswith("application/x-www-form-urlencoded"):
                 fields = urlparse.parse_qsl(content)
-                for f in fields:
-                    logging.debug("Field: " + str(f))
-                    if _openid_field(f):
-                        self.openid[f[0]] = f[1]
+                for (key, val) in fields:
+                    if key.startswith("openid."):
+                        self.openid[key] = val
                     else:
-                        self.post[f[0]] = f[1]
+                        self.post[key] = val
         logging.debug("OpenID fields:\n" + pprint.pformat(self.openid))
 
     def self_uri(self, cfg, https=False):
