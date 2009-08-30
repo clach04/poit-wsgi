@@ -174,19 +174,22 @@ class CGIParser():
 
     Instanciate once only, as sys.stdin is read.
      - OpenID fields are put into `openid' attribute.
-     - POST fields are kept in `post' attribute, with all OpenID fields filtered out
-     - Other GET fields are discarded
+     - POST and GET fields are kept in `post' and `get' attributes,
+       respectively, with all OpenID fields filtered out
      '''
     def __init__(self):
         self.openid = dict()
         self.post = dict()
+        self.get = dict()
 
         def _openid_field(pair):
             return pair[0].startswith("openid.")
 
-        self.openid.update(filter(_openid_field,
-                                  urlparse.parse_qsl(os.environ["QUERY_STRING"],
-                                                     keep_blank_values = True)))
+        for f in urlparse.parse_qsl(os.environ["QUERY_STRING"], keep_blank_values = True):
+            if _openid_field(f):
+                self.openid[f[0]] = f[1]
+            else:
+                self.post[f[0]] = f[1]
 
         content_length = int(os.environ.get("CONTENT_LENGTH", 0))
         if content_length:
