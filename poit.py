@@ -430,7 +430,7 @@ def cgi_main(cfg):
     for header in response.headers.items():
         print('%s: %s' % header)
     print(cookie.output())
-    print()
+    print("")
     print(response.body)
 
     if cfg.debug:
