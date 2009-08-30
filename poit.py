@@ -183,6 +183,7 @@ class CGIParser():
         self.post = dict()
         self.get = dict()
 
+        logging.debug("env:\n" + pprint.pformat(dict(os.environ)))
 
         for (key, val) in urlparse.parse_qsl(os.environ["QUERY_STRING"], keep_blank_values = True):
             if key.startswith("openid."):
@@ -193,6 +194,8 @@ class CGIParser():
         content_length = int(os.environ.get("CONTENT_LENGTH", 0))
         if content_length:
             content = sys.stdin.read(content_length)
+            logging.debug("Content-Type: " + os.environ["CONTENT_TYPE"])
+            logging.debug("data:\n" + content)
             if os.environ["CONTENT_TYPE"].startswith("application/x-www-form-urlencoded"):
                 fields = urlparse.parse_qsl(content)
                 for (key, val) in fields:
@@ -200,6 +203,8 @@ class CGIParser():
                         self.openid[key] = val
                     else:
                         self.post[key] = val
+        logging.debug("GET fields:\n" + pprint.pformat(self.get))
+        logging.debug("POST fields:\n" + pprint.pformat(self.post))
         logging.debug("OpenID fields:\n" + pprint.pformat(self.openid))
 
     def self_uri(self, cfg, https=False):
@@ -281,14 +286,17 @@ def check_passphrase(cfg, cgi_request):
     if "passphrase" in cgi_request.post:
         # Check hashes
         if not auth_key.validate(cgi_request.post["passphrase"]):
+            logging.debug("Passphrase rejected")
             return False
 
         # Set cookie
+        logging.debug("Passphrase accepted")
         global cookie
         cookie = auth_key.cookie()
         return True
 
     else:
+        logging.info("Prompt for passphrase")
         import re
         if "REDIRECT_URL" in os.environ:
             redirect = os.environ['REDIRECT_URL']
@@ -361,9 +369,9 @@ def cgi_main(cfg):
     if not cfg.endpoint:
         cfg.endpoint = cgi_request.self_uri(cfg, https=cfg.force_https())
 
-    logging.info("Endpoint: " + cfg.endpoint)
+    logging.debug("Endpoint: " + cfg.endpoint)
     oserver = OpenIDServer(ostore, cfg.endpoint)
-    logging.info("Initialized server")
+    logging.debug("Initialized server")
 
     # Decode request
     try:
@@ -374,7 +382,6 @@ def cgi_main(cfg):
 
     if not request:
         print("Content-Type: text/plain\n")
-        pprint.pprint(dict(os.environ))
         logging.shutdown()
         return
 
@@ -398,6 +405,7 @@ def cgi_main(cfg):
     if type(request) == CheckIDRequest:
         # Reject if identity is not accepable
         if not cfg.validate_id(request.identity):
+            logging.info("Invalid ID: " + request.identity)
             response = request.answer(False)
         else:
             response = check_session()
@@ -405,8 +413,12 @@ def cgi_main(cfg):
                 response = check_passphrase(cfg, cgi_request)
                 #response = cfg.validate_passphrase(passphrase)
 
+            logging.info("Session validation: " + ("SUCCESS" if response else "FAILURE"))
+
             response = request.answer(response)
             handle_sreg(cfg, request, response)
+
+            logging.debug("Response:\n" + response.encodeToKVForm())
     else:
         try:
             response = oserver.handleRequest(request)
