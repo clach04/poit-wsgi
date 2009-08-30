@@ -2,6 +2,7 @@
 
 import cgi
 import exceptions
+import hashlib
 import logging
 import logging.handlers
 import os
@@ -167,8 +168,6 @@ class ConfigManager():
     
 #######################################
 # CGI functions
-
-import hashlib
 
 class CGIParser():
     '''Similar to cgi.FieldStorage, but specific to this script
@@ -343,16 +342,6 @@ def check_session():
     cookie.renew()
     return True
 
-def handle_login(request, passphrase):
-    pass
-
-def handle_nonopenid(query, passphrase=None):
-    """Handle non-OpenID requests"""
-    print('Content-Type: text/plain\n')
-    print(os.environ)
-    sys.exit()
-
-
 def handle_sreg(cfg, request, response):
     """Handle any sreg data requests"""
     sreg_req = SRegRequest.fromOpenIDRequest(request)
@@ -467,10 +456,6 @@ def cli_main(cfg):
 #-----------------------------
 
 if __name__ == '__main__':
-    # Initialize paths and server object
-    key_dir = os.path.expanduser('~/.openid')
-    sreg_file = key_dir + '/sreg'
-
     init_logger()
 
     if 'REQUEST_METHOD' in os.environ:
