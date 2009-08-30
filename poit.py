@@ -7,6 +7,7 @@ import logging.handlers
 import os
 import re
 import sys
+import urllib
 import pprint
 
 import cgitb; cgitb.enable()
@@ -384,7 +385,9 @@ def cgi_main(cfg):
     if type(request) == CheckIDRequest and \
             cfg.force_https() and \
             ('HTTPS' not in os.environ or os.environ['HTTPS'] != 'on'):
-        print("Location: https://%s%s\n" % (os.environ['HTTP_HOST'], os.environ['REQUEST_URI']))
+        print("location: {endpoint}?{fields}\n".format(
+                    endpoint = re.sub("^http:", "https:", cfg.endpoint),
+                    fields = urllib.urlencode(cgi_request.openid)))
         return
 
     cookie = OpenIDSessionCookie(os.environ.get('HTTP_COOKIE', ''))
