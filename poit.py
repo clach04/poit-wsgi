@@ -62,8 +62,10 @@ def init_logger():
 class ConfigManager():
     '''Manages configuration, profile and session information
 
-    User-controlled configurations are stored in a poit.cfg file, looked for in
-    ~/.poit and script directory, in that order.
+    Search the following paths for the config file, in order:
+      * ~/.config/poit.conf
+      * ~/.poit.conf
+      * ./poit.conf
     '''
 
     def __init__(self, config_mode=False):
@@ -81,8 +83,9 @@ class ConfigManager():
         self._parser = None
 
         # Find and load configuration file
-        for dir in [os.path.expanduser('~/.poit'), '.']:
-            f = dir + "/poit.config"
+        for f in [os.path.expanduser("~/.config/poit.conf"),
+                  os.path.expanduser("~/.poit.conf"),
+                  "./poit.conf"]:
             if not os.path.exists(f):
                 logging.debug("`{0}' does not exist".format(f))
                 continue
@@ -92,7 +95,7 @@ class ConfigManager():
 
         if not (self.cfgfile or config_mode) :
             logging.error("Configuration file not found")
-            raise exceptions.IOError("File not found")
+            raise exceptions.IOError("No configuration file found")
 
         self._parser = configparser.SafeConfigParser()
         self._parser.read(self.cfgfile)
