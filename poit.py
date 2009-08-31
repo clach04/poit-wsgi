@@ -3,6 +3,7 @@
 # poit is copyright 2009 by Yang Zhao <yang@yangman.ca>
 # This file is distributed under terms of Apache License, Version 2.0
 # For full text of the license, see http://www.apache.org/licenses/LICENSE-2.0
+from __future__ import print_function
 
 import cgi
 import base64
