@@ -8,6 +8,7 @@ from __future__ import print_function
 import cgi
 import base64
 import exceptions
+import getpass
 import hashlib
 import logging
 import logging.handlers
@@ -19,6 +20,7 @@ import sys
 import urllib
 import pprint
 from datetime import datetime
+from optparse import OptionParser
 
 import cgitb; cgitb.enable()
 
@@ -116,6 +118,8 @@ class ConfigManager():
         self._parser.read(self.cfgfile)
 
         # Sanity check values
+        if not self._parser.has_section("passphrase"):
+            self._parser.add_section("passphrase")
         self._keys_exist = self._parser.has_option("passphrase", "md5") and \
                            self._parser.has_option("passphrase", "sha512")
 
@@ -151,7 +155,7 @@ class ConfigManager():
         '''Saves configuration to file. Assumes cfgfile is set.'''
         if not self._dirty: return True
         logger.info("Saving configuration to " + self.cfgfile)
-        self._parser.write(open(cfgfile, 'w'))
+        self._parser.write(open(self.cfgfile, 'w'))
 
     def validate_passphrase(self, passphrase):
         if not (self._keys_exist and passphrase): return False
@@ -165,6 +169,12 @@ class ConfigManager():
         except TypeError:
             logger.warn("Malformed passphrase hash found")
             return False
+
+    def set_passphrase(self, passphrase):
+        for cipher in ["md5", "sha512"]:
+            self._parser.set("passphrase", cipher,
+                             base64.b64encode(getattr(hashlib, cipher)(passphrase).digest()))
+        self._dirty = True
 
     def validate_id(self, id):
         return (re.sub(r'^http[s]?://(.*[^/])[/]?$', r'\1', id, 1) in self._parser.options('ids'))
@@ -488,7 +498,32 @@ def cgi_main(cfg):
 #######################################
 # Commandline mode functions
 
+def parse_options():
+    parser = OptionParser(description="Used to modify a poit configuration file")
+    parser.add_option("-p", "--passphrase", action="store_true", dest="passphrase",
+                      help="Set a new passphrase")
+
+    return parser.parse_args()
+
 def cli_main(cfg):
+    (options, args) = parse_options()
+
+    if options.passphrase:
+        try:
+            new_pass = getpass.getpass("New passphrase: ")
+        except getpass.GetPassWarning:
+            print("Your input may be echoed and your new passphrase compromised. Aborting.",
+                  file=sys.stderr)
+            sys.exit(1)
+
+        if new_pass != getpass.getpass("Confirm new passphrase: "):
+            print("Passphrases do not match")
+            sys.exit(1)
+
+        cfg.set_passphrase(new_pass)
+        print("New passphrase set")
+
+    cfg.save()
     logger.flush()
 
 
