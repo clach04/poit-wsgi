@@ -499,15 +499,16 @@ def cgi_main(cfg):
 #######################################
 # Commandline mode functions
 
-def parse_options():
-    parser = OptionParser(description="Used to modify a poit configuration file")
+def setup_option_parser():
+    parser = OptionParser(description="Modify poit configuration file")
     parser.add_option("-p", "--passphrase", action="store_true", dest="passphrase",
                       help="Set a new passphrase")
 
-    return parser.parse_args()
+    return parser
 
 def cli_main(cfg):
-    (options, args) = parse_options()
+    parser = setup_option_parser()
+    (options, args) = parser.parse_args()
 
     if options.passphrase:
         try:
@@ -523,6 +524,8 @@ def cli_main(cfg):
 
         cfg.set_passphrase(new_pass)
         print("New passphrase set")
+    else:
+        parser.print_help()
 
     cfg.save()
     logger.flush()
