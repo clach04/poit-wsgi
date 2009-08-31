@@ -154,9 +154,16 @@ class ConfigManager():
 
     def validate_passphrase(self, passphrase):
         if not (self._keys_exist and passphrase): return False
-        if hashlib.md5(passphrase).hexdigest() != self._parser.get("passphrase", "md5"): return False
-        if hashlib.sha512(passphrase).hexdigest() != self._parser.get("passphrase", "sha512"): return False
-        return True
+        def f(r, cipher):
+            return r and \
+                   (getattr(hashlib, cipher)(passphrase).digest() !=
+                    base64.b64decode(self._parser.get("passphrase"), cipher))
+
+        try:
+            return reduce(f, ["md5", "sha512"])
+        except TypeError:
+            logger.warn("Malformed passphrase hash found")
+            return False
 
     def validate_id(self, id):
         return (re.sub(r'^http[s]?://(.*[^/])[/]?$', r'\1', id, 1) in self._parser.options('ids'))
