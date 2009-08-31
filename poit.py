@@ -22,7 +22,7 @@ import pprint
 from datetime import datetime
 from optparse import OptionParser
 
-import cgitb; cgitb.enable()
+import cgitb
 
 ###########################################
 
@@ -371,6 +371,7 @@ def handle_sreg(cfg, request, response):
         sreg_resp.toMessage(response.fields)
 
 def cgi_main(cfg):
+    cgitb.enable()
     global request
     ostore = FileOpenIDStore(cfg.session_dir)
 
