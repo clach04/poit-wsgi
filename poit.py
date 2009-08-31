@@ -204,9 +204,6 @@ class ConfigManager():
         logger.debug("Cookie value: " + val)
         return val
 
-    def cookie_output(self):
-        return self._cookie.output() if self._cookie else ""
-
     def force_https(self):
         return self._parser.has_option("security", "force_https") and \
                self._parser.getboolean("security", "force_https")
@@ -334,6 +331,9 @@ class Session:
 
     def expire(self):
         self.renew(0)
+
+    def cookie_output(self):
+        return self._cookie.output() if self._cookie else ""
 
 
 def handle_sreg(cfg, request, response):
