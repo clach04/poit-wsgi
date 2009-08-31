@@ -1,15 +1,19 @@
 #!/usr/bin/python
 
 import cgi
+import base64
 import exceptions
 import hashlib
 import logging
 import logging.handlers
 import os
+import random
 import re
+import struct
 import sys
 import urllib
 import pprint
+from datetime import datetime
 
 import cgitb; cgitb.enable()
 
@@ -22,9 +26,11 @@ if py_version[0] == 3:
     import configparser
     import urllib.parse as urlparse
     from http.cookies import SimpleCookie
+    from http import cookies
 elif py_version[1] >= 6:
     import ConfigParser as configparser
     import urlparse
+    import Cookie as cookies
     from Cookie import SimpleCookie
 else:
     print('unsupported version of Python')
@@ -36,8 +42,6 @@ from openid.server.server import Server as OpenIDServer, CheckIDRequest, CheckAu
 from openid.extensions.sreg import SRegRequest, SRegResponse
 from openid.store.filestore import FileOpenIDStore
 
-auth_key = None
-cookie = None
 
 #######################################
 # Common functions
@@ -118,6 +122,11 @@ class ConfigManager():
         if self._parser.has_option("session", "endpoint"):
             self.endpoint = self._parser.get("session", "endpoint")
 
+        if self._parser.has_option("session", "timeout"):
+            self.timeout = self._parser.get("session", "timeout")
+        else:
+            self.timeout = 21600
+
         if self._parser.has_option("ui", "debug"):
             self.debug = self._parser.getboolean("ui", "debug")
 
@@ -150,6 +159,53 @@ class ConfigManager():
 
     def get_passphrase_hash(self, hash):
         return self._parser.get("passphrase", hash)
+
+    # Session Cookie methods
+    # TODO: Implement a version using symmetric-key block cipher
+    def _cookie_hash(self, salt, time):
+        h = hashlib.sha512()
+        # FIXME: check for hashes not being available?
+        h.update(salt)
+        h.update(time)
+        h.update(self._parser.get("passphrase", "md5"))
+        h.update(self._parser.get("passphrase", "sha512"))
+        return h.digest()
+
+    def validate_cookie_val(self, val):
+        vals = val.split(":")
+        try:
+            salt = base64.b64decode(vals[0])
+            time_str = vals[1]
+            hash = base64.b64decode(vals[2])
+        except IndexError, TypeError:
+            logger.warn("Malformed cookie value: " + val)
+            return False
+
+        now = datetime.utcnow()
+        cookie_time = datetime.strptime(time_str, "%Y%m%d%H%M%S")
+
+        diff = (now - cookie_time).seconds
+        if diff < 0:
+            logger.warn("Cookie time in the future")
+            return False
+        elif diff > self.timeout:
+            logger.warn("Cookie timed out")
+            return False
+
+        return self._cookie_hash(salt, time_str) == hash
+
+    def create_cookie_val(self):
+        salt = struct.pack("34B", *(random.randint(0,255) for x in range(34)))
+        time = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+
+        hash = self._cookie_hash(salt, time)
+
+        val = "{0}:{1}:{2}".format(base64.b64encode(salt), time, base64.b64encode(hash))
+        logger.debug("Cookie value: " + val)
+        return val
+
+    def cookie_output(self):
+        return self._cookie.output() if self._cookie else ""
 
     def force_https(self):
         return self._parser.has_option("security", "force_https") and \
@@ -222,129 +278,63 @@ class CGIParser():
                     uri = os.environ["SCRIPT_NAME"])
 
 
-class OpenIDSessionCookie(SimpleCookie):
-    def set_timeout(self, timeout=3600):
-        '''Set expiration of cookie timeout seconds into the future
-        If 0, expire this cookie
-        '''
-        for o in self.values():
-            o['expires'] = timeout
-            o['secure'] = True
-            o['path'] = '/openid'
-        return self
+class Session:
+    def __init__(self, config, cgi_request):
+        logger.debug("Initializing session object")
+        self.config = config
+        self.cgi_request = cgi_request
+        self._auth = False
+        try:
+            self._cookie = cookies.SimpleCookie(os.environ["HTTP_COOKIE"])
+        except cookies.CookieError as e:
+            logger.warning("Bad cookie: " + str(e))
+            self._cookie = None
+        except KeyError:
+            self._cookie = None
 
-    def expire(self): return self.set_timeout(0)
-    def renew(self): return self.set_timeout()
-
-    def __set_secure(self, opt, val, timeout=3600):
-        self[opt] = val
-        self[opt]['expires'] = timeout
-        self[opt]['secure'] = True
-        self[opt]['path'] = '/openid'
-
-    def set_hash(self, name, value):
-        self.__set_secure(name, value)
-
-
-class OpenIDKey:
-    '''OpenID authentication keys stored locally'''
-
-    def __init__(self, cfg):
-        self.cfg = cfg
-
-    def validate(self, key):
-        '''Validate a passphrase or cookie'''
-        if type(key) == str:
-            return self.cfg.validate_passphrase(key)
-
-        elif type(key) == OpenIDSessionCookie:
-            try:
-                h = hashlib.sha1()
-                h.update(self.md5)
-                h.update(key['openid_1'].value)
-                h.update(self.sha512)
-
-                return h.hexdigest() == key['openid_2'].value
-            except KeyError:
-                return False
-
+        if self._check_cookie():
+            logger.info("Authenticated cookie session")
+            self._auth = True
         else:
+            logger.debug("No cookie session")
+
+        if self._check_passphrase():
+            logger.info("Authenticated using passphrase")
+            self._auth = True
+
+    def _check_cookie(self):
+        return self._cookie and \
+               self.config.validate_cookie_val(self._cookie["poit_session"].value)
+
+    def _check_passphrase(self):
+        try:
+            return self.config.validate_passphrase(self.cgi_request.post["passphrase"])
+        except KeyError:
             return False
 
-    def cookie(self):
-        '''Make a new session cookie'''
-        import random
-        salt = ''.join([random.choice('0123456789abcdef') for x in range(40)])
-        h = hashlib.sha1()
-        h.update(self.cfg.get_passphrase_hash("md5"))
-        h.update(salt)
-        h.update(self.cfg.get_passphrase_hash("sha512"))
-        key = h.hexdigest()
+    def is_secure(self):
+        return os.environ.get("HTTPS", None) == "on"
 
-        cookie = OpenIDSessionCookie()
-        cookie.set_hash('openid_1', salt)
-        cookie.set_hash('openid_2', key)
+    def authenticated(self):
+        return self._auth
 
-        return cookie
-    
+    def renew(self, timeout):
+        logger.debug("Renew session for {0}s".format(timeout))
+        if not self._cookie:
+            self._cookie = cookies.SimpleCookie()
 
-def check_passphrase(cfg, cgi_request):
-    '''Ask for and validate passphrase'''
-    # Login attempt
-    if "passphrase" in cgi_request.post:
-        # Check hashes
-        if not auth_key.validate(cgi_request.post["passphrase"]):
-            logger.debug("Passphrase rejected")
-            return False
+        endpoint = urlparse.urlparse(self.config.endpoint)
 
-        # Set cookie
-        logger.debug("Passphrase accepted")
-        global cookie
-        cookie = auth_key.cookie()
-        return True
+        self._cookie["poit_session"] = self.config.create_cookie_val()
+        val = self._cookie["poit_session"]
+        val["Max-Age"] = timeout
+        val["Domain"] = endpoint.netloc
+        val["Path"] = endpoint.path
+        val["Secure"] = self.is_secure
 
-    else:
-        logger.info("Prompt for passphrase")
-        import re
-        if "REDIRECT_URL" in os.environ:
-            redirect = os.environ['REDIRECT_URL']
-            if cfg.force_https():
-                redirect = re.sub(r'^http:', 'https:', os.environ['REDIRECT_URL'])
-        else:
-            redirect = ("https" if os.environ.get("HTTPS", None) == "on" else "http") + \
-                       "://" + os.environ["HTTP_HOST"] + os.environ["SCRIPT_NAME"]
+    def expire(self):
+        self.renew(0)
 
-        print("Content-Type: text/html\n")
-        print('''<html><head><title>OpenID authenticate</title></head>
-            <body>
-            <form action="{0}" method="post">
-                <input type="password" name="passphrase" size="20" />
-                <button type="submit">Authorize</button>'''.format(redirect))
-
-        for (name, value) in cgi_request.openid.items():
-            print('<input type="hidden" name="{0}" value="{1}" />'.format(name, value))
-
-        print('</form>')
-        print('<a href="%s">Reject</a>' % (request.getCancelURL(),))
-
-        if cfg.debug:
-            print('<pre>')
-            logger.flush()
-            print('</pre></body></html>')
-
-        sys.exit()
-
-    return False
-
-
-def check_session():
-    '''Check whether or not a session cookie has already been made'''
-    if not auth_key.validate(cookie):
-        return False
-
-    # Update cookie's expiration time
-    cookie.renew()
-    return True
 
 def handle_sreg(cfg, request, response):
     """Handle any sreg data requests"""
@@ -392,31 +382,59 @@ def cgi_main(cfg):
                     fields = urllib.urlencode(cgi_request.openid)))
         return
 
-    cookie = OpenIDSessionCookie(os.environ.get('HTTP_COOKIE', ''))
-
-    # Read key from file
-    global auth_key
-    auth_key = OpenIDKey(cfg)
-
+    session = Session(cfg, cgi_request)
     response = None
 
     if type(request) == CheckIDRequest:
         # Reject if identity is not accepable
         if not cfg.validate_id(request.identity):
             logger.info("Invalid ID: " + request.identity)
-            response = request.answer(False)
+            response = False
+        elif session.authenticated():
+            response = True
+        elif request.immediate:
+            logger.info("Rejected immediate_mode")
+            response = False
         else:
-            response = check_session()
-            if not response and not request.immediate:
-                response = check_passphrase(cfg, cgi_request)
-                #response = cfg.validate_passphrase(passphrase)
+            logger.info("Prompt for passphrase")
+            if "REDIRECT_URL" in os.environ:
+                redirect = os.environ['REDIRECT_URL']
+                if cfg.force_https():
+                    redirect = re.sub(r'^http:', 'https:', os.environ['REDIRECT_URL'])
+            else:
+                redirect = ("https" if os.environ.get("HTTPS", None) == "on" else "http") + \
+                           "://" + os.environ["HTTP_HOST"] + os.environ["SCRIPT_NAME"]
 
-            logger.info("Session validation: " + ("SUCCESS" if response else "FAILURE"))
+            print("Content-Type: text/html\n")
+            print('''<html><head><title>OpenID authenticate</title></head>
+                <body>
+                <form action="{0}" method="post">
+                    <input type="password" name="passphrase" size="20" />
+                    <button type="submit">Authorize</button>'''.format(redirect))
 
-            response = request.answer(response)
-            handle_sreg(cfg, request, response)
+            for (name, value) in cgi_request.openid.items():
+                print('<input type="hidden" name="{0}" value="{1}" />'.format(name, value))
 
-            logger.debug("Response:\n" + response.encodeToKVForm())
+            print('</form>')
+            print('<a href="%s">Reject</a>' % (request.getCancelURL(),))
+
+            if cfg.debug:
+                print('<pre>')
+                logger.flush()
+                print('</pre></body></html>')
+
+            sys.exit()
+
+
+        logger.info("Session validation: " + ("SUCCESS" if response else "FAILURE"))
+
+        if response:
+            session.renew(cfg.timeout)
+
+        response = request.answer(response)
+        handle_sreg(cfg, request, response)
+
+        logger.debug("Response:\n" + response.encodeToKVForm())
     else:
         try:
             response = oserver.handleRequest(request)
@@ -439,7 +457,10 @@ def cgi_main(cfg):
 
     for header in response.headers.items():
         print('%s: %s' % header)
-    print(cookie.output())
+    cookie = session.cookie_output()
+    if cookie:
+        logger.debug("Cookie: " + cookie)
+        print(cookie)
     print("")
     print(response.body)
 
