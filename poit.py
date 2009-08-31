@@ -327,7 +327,8 @@ class Session:
         val["Max-Age"] = timeout
         val["Domain"] = endpoint.netloc
         val["Path"] = endpoint.path
-        val["Secure"] = self.is_secure
+        if self.is_secure():
+            val["secure"] = True
 
     def expire(self):
         self.renew(0)
