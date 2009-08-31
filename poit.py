@@ -324,9 +324,10 @@ class Session:
 
         self._cookie["poit_session"] = self.config.create_cookie_val()
         val = self._cookie["poit_session"]
-        val["Max-Age"] = timeout
-        val["Domain"] = endpoint.netloc
-        val["Path"] = endpoint.path
+        val["max-age"] = timeout
+        val["domain"] = endpoint.netloc
+        val["path"] = endpoint.path
+        val["httponly"] = True
         if self.is_secure():
             val["secure"] = True
 
