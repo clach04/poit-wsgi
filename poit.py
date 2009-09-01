@@ -521,7 +521,7 @@ def cgi_main(cfg):
 def setup_option_parser():
     parser = OptionParser(description="Modify poit configuration file",
                           version="poit {0}".format(POIT_VERSION))
-    parser.add_option("-a", "--add-identity", action="store", dest="new_identity",
+    parser.add_option("-a", "--add-identity", action="append", dest="new_identity",
                       help="Add a new identity")
     parser.add_option("-p", "--passphrase", action="store_true", dest="passphrase",
                       help="Set a new passphrase")
@@ -532,7 +532,16 @@ def cli_main(cfg):
     parser = setup_option_parser()
     (options, args) = parser.parse_args()
 
+    no_opts = True
+
+    if options.new_identity:
+        no_opts = False
+        for id in options.new_identity:
+            cfg.add_identity(id)
+            print("Added new identity: " + id)
+
     if options.passphrase:
+        no_opts = False
         try:
             new_pass = getpass.getpass("New passphrase: ")
         except getpass.GetPassWarning:
@@ -546,10 +555,8 @@ def cli_main(cfg):
 
         cfg.set_passphrase(new_pass)
         print("New passphrase set")
-    elif options.new_identity:
-        cfg.add_identity(options.new_identity)
-        print("Added new identity: " + options.new_identity)
-    else:
+
+    if no_opts:
         parser.print_help()
 
     cfg.save()
