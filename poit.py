@@ -521,7 +521,7 @@ def cgi_main(cfg):
 def setup_option_parser():
     parser = OptionParser(description="Modify poit configuration file",
                           version="poit {0}".format(POIT_VERSION))
-    parser.add_option("-a", "--add", action="store", dest="new_identity",
+    parser.add_option("-a", "--add-identity", action="store", dest="new_identity",
                       help="Add a new identity")
     parser.add_option("-p", "--passphrase", action="store_true", dest="passphrase",
                       help="Set a new passphrase")
