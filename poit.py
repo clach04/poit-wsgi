@@ -176,8 +176,21 @@ class ConfigManager():
                              base64.b64encode(getattr(hashlib, cipher)(passphrase).digest()))
         self._dirty = True
 
+    # Identity management
+    @staticmethod
+    def _hash_identity(id):
+        return "{0}_{1}".format(len(id), hashlib.md5(id).hexdigest()[0:16])
+
+    def add_identity(self, id):
+        # TODO: noop when already exist?
+        self._parser.set("ids", ConfigManager._hash_identity(id), id)
+        self._dirty = True
+
     def validate_id(self, id):
-        return (re.sub(r'^http[s]?://(.*[^/])[/]?$', r'\1', id, 1) in self._parser.options('ids'))
+        try:
+            return self._parser.get("ids", ConfigManager._hash_identity(id)) == id
+        except configparser.NoOptionError, configparser.NoSectionError:
+            return False
 
     def get_passphrase_hash(self, hash):
         return self._parser.get("passphrase", hash)
@@ -506,6 +519,8 @@ def cgi_main(cfg):
 
 def setup_option_parser():
     parser = OptionParser(description="Modify poit configuration file")
+    parser.add_option("-a", "--add", action="store", dest="new_identity",
+                      help="Add a new identity")
     parser.add_option("-p", "--passphrase", action="store_true", dest="passphrase",
                       help="Set a new passphrase")
 
@@ -529,6 +544,9 @@ def cli_main(cfg):
 
         cfg.set_passphrase(new_pass)
         print("New passphrase set")
+    elif options.new_identity:
+        cfg.add_identity(options.new_identity)
+        print("Added new identity: " + options.new_identity)
     else:
         parser.print_help()
 
