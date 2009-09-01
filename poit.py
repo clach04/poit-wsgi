@@ -298,11 +298,15 @@ class CGIParser():
 
 
 class Session:
+    AUTHENTICATED = 0
+    NO_SESSION = 1
+    BAD_PASSPHRASE = 2
+
     def __init__(self, config, cgi_request):
         logger.debug("Initializing session object")
         self.config = config
         self.cgi_request = cgi_request
-        self._auth = False
+        self._auth = Session.NO_SESSION
         try:
             self._cookie = cookies.SimpleCookie(os.environ["HTTP_COOKIE"])
         except cookies.CookieError as e:
@@ -311,30 +315,27 @@ class Session:
         except KeyError:
             self._cookie = None
 
-        if self._check_cookie():
+        self._check_auth()
+
+    def _check_auth(self):
+        if self._cookie and \
+           self.config.validate_cookie_val(self._cookie["poit_session"].value):
             logger.info("Authenticated cookie session")
-            self._auth = True
+            self._auth = Session.AUTHENTICATED
         else:
-            logger.debug("No cookie session")
-
-        if self._check_passphrase():
-            logger.info("Authenticated using passphrase")
-            self._auth = True
-
-    def _check_cookie(self):
-        return self._cookie and \
-               self.config.validate_cookie_val(self._cookie["poit_session"].value)
-
-    def _check_passphrase(self):
-        try:
-            return self.config.validate_passphrase(self.cgi_request.post["passphrase"])
-        except KeyError:
-            return False
+            try:
+                if self.config.validate_passphrase(self.cgi_request.post["passphrase"]):
+                    logger.info("Authenticated using passphrase")
+                    self._auth = Session.AUTHENTICATED
+                else:
+                    self._auth = Session.BAD_PASSPHRASE
+            except KeyError:
+                return False
 
     def is_secure(self):
         return os.environ.get("HTTPS", None) == "on"
 
-    def authenticated(self):
+    def auth_status(self):
         return self._auth
 
     def renew(self, timeout):
@@ -412,13 +413,17 @@ def cgi_main(cfg):
 
     if type(request) == CheckIDRequest:
         # Reject if identity is not accepable
+        auth_stat = session.auth_status()
         if not cfg.validate_id(request.identity):
             logger.info("Invalid ID: " + request.identity)
             response = False
-        elif session.authenticated():
+        elif auth_stat == Session.AUTHENTICATED:
             response = True
         elif request.immediate:
             logger.info("Rejected immediate_mode")
+            response = False
+        elif auth_stat == Session.BAD_PASSPHRASE:
+            logger.info("Bad passphrase")
             response = False
         else:
             logger.info("Prompt for passphrase")
