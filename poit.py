@@ -158,6 +158,18 @@ class ConfigManager():
         logger.info("Saving configuration to " + self.cfgfile)
         self._parser.write(open(self.cfgfile, 'w'))
 
+    def set_endpoint(self, url, save_to_file=False):
+        '''If url is empty, change attribute iff save_to_file is True'''
+        if save_to_file:
+            if url:
+                self.endpoint = url
+                self._parser.set("session", "endpoint", url)
+            else:
+                self._parser.remove_option("session", "endpoint")
+            self._dirty = True
+        else:
+            self.endpoint = url
+
     def validate_passphrase(self, passphrase):
         if not (self._keys_exist and passphrase): return False
         def f(r, cipher):
@@ -395,7 +407,7 @@ def cgi_main(cfg):
 
     # Make sure an endpoint is set
     if not cfg.endpoint:
-        cfg.endpoint = cgi_request.self_uri(cfg, https=cfg.force_https())
+        cfg.set_endpoint(cgi_request.self_uri(cfg, https=cfg.force_https()))
 
     logger.debug("Endpoint: " + cfg.endpoint)
     oserver = OpenIDServer(ostore, cfg.endpoint)
@@ -525,6 +537,8 @@ def setup_option_parser():
                       help="Add a new identity")
     parser.add_option("-p", "--passphrase", action="store_true", dest="passphrase",
                       help="Set a new passphrase")
+    parser.add_option("--endpoint", dest="endpoint",
+                      help='Set server endpoint URL; clear by setting to ""')
 
     return parser
 
@@ -533,6 +547,14 @@ def cli_main(cfg):
     (options, args) = parser.parse_args()
 
     no_opts = True
+
+    if options.endpoint is not None:
+        no_opts = False
+        cfg.set_endpoint(options.endpoint, save_to_file=True)
+        if options.endpoint:
+            print("Server endpoint is now: " + options.endpoint)
+        else:
+            print("Server endpoint unset")
 
     if options.new_identity:
         no_opts = False
