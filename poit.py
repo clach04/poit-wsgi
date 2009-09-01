@@ -175,8 +175,8 @@ class ConfigManager():
         if not (self._keys_exist and passphrase): return False
         def f(r, cipher):
             return r and \
-                   (getattr(hashlib, cipher)(passphrase).digest() !=
-                    base64.b64decode(self._parser.get("passphrase"), cipher))
+                   (getattr(hashlib, cipher)(passphrase).digest() ==
+                    base64.b64decode(self._parser.get("passphrase", cipher)))
 
         try:
             return reduce(f, ["md5", "sha512"])
