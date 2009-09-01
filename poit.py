@@ -156,7 +156,8 @@ class ConfigManager():
         '''Saves configuration to file. Assumes cfgfile is set.'''
         if not self._dirty: return True
         logger.info("Saving configuration to " + self.cfgfile)
-        self._parser.write(open(self.cfgfile, 'w'))
+        with open(self.cfgfile, 'w') as f:
+            self._parser.write(f)
 
     def set_endpoint(self, url, save_to_file=False):
         '''If url is empty, change attribute iff save_to_file is True'''
