@@ -540,6 +540,8 @@ def setup_option_parser():
                       help="Set a new passphrase")
     parser.add_option("--endpoint", dest="endpoint",
                       help='Set server endpoint URL; clear by setting to ""')
+    parser.add_option("-v", "--verbose", action="store_true", dest="debug",
+                      help="Show debugging messages")
 
     return parser
 
@@ -583,7 +585,9 @@ def cli_main(cfg):
         parser.print_help()
 
     cfg.save()
-    logger.flush()
+
+    if options.debug:
+        logger.flush()
 
 
 #-----------------------------
