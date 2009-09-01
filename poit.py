@@ -49,6 +49,7 @@ from openid.server.server import Server as OpenIDServer, CheckIDRequest, CheckAu
 from openid.extensions.sreg import SRegRequest, SRegResponse
 from openid.store.filestore import FileOpenIDStore
 
+POIT_VERSION = "0.1_alpha"
 
 #######################################
 # Common functions
@@ -518,7 +519,8 @@ def cgi_main(cfg):
 # Commandline mode functions
 
 def setup_option_parser():
-    parser = OptionParser(description="Modify poit configuration file")
+    parser = OptionParser(description="Modify poit configuration file",
+                          version="poit {0}".format(POIT_VERSION))
     parser.add_option("-a", "--add", action="store", dest="new_identity",
                       help="Add a new identity")
     parser.add_option("-p", "--passphrase", action="store_true", dest="passphrase",
