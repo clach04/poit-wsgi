@@ -540,6 +540,7 @@ def cgi_main():
 
 def setup_option_parser():
     parser = OptionParser(description="Modify poit configuration file",
+                          usage="%prog [options] <config_file>",
                           version="poit {0}".format(POIT_VERSION))
     parser.add_option("-a", "--add-identity", action="append", dest="new_identity",
                       help="Add a new identity")
@@ -558,13 +559,35 @@ def cli_main():
 
     no_opts = True
 
-    # FIXME: make config file specifiable, and create one if non available
-    config_file = ConfigManager.find_config_file()
-    if not config_file:
-        print("No configuration file found")
-        sys.exit(1)
+    config_file = None
 
-    cfg = ConfigManager(ConfigManager.find_config_file())
+    def new_file_prompt(path):
+        path = os.path.abspath(path)
+        r = raw_input("Crate new configuration file at {0}? [Y/n]: ".format(path))
+        r = r.lower() if r else "y"
+        if r[0] == "y":
+            config_file = DEFAULT_CONFIG_FILES[0]
+            with open(config_file, 'w'): pass
+            return True
+        else:
+            return False
+
+    if args:
+        config_file = args[0]
+        if not os.path.exists(config_file):
+            print("No configuration file at {0}".format(config_file))
+            if not new_file_prompt(config_file):
+                sys.exit(0)
+    else:
+        config_file = ConfigManager.find_config_file()
+        if not config_file:
+            config_file = DEFAULT_CONFIG_FILES[0]
+            print("No configuration file found")
+            if not new_file_prompt(config_file):
+                sys.exit(0)
+
+    print("Using {0}".format(config_file))
+    cfg = ConfigManager(config_file)
 
     if options.endpoint is not None:
         no_opts = False
