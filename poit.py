@@ -120,8 +120,10 @@ class ConfigManager():
         if not self._parser.has_section("ids"):
             self._parser.add_section("ids")
 
-        if self._parser.has_option("session", "endpoint"):
-            self.endpoint = self._parser.get("session", "endpoint")
+        if not self._parser.has_section("server"):
+            self._parser.add_section("server")
+        if self._parser.has_option("server", "endpoint"):
+            self.endpoint = self._parser.get("server", "endpoint")
 
         if self._parser.has_option("session", "timeout"):
             self.timeout = self._parser.get("session", "timeout")
@@ -133,7 +135,7 @@ class ConfigManager():
 
         # Session folder
         try:
-            self.session_dir = self._parser.get("session", "store_dir")
+            self.session_dir = self._parser.get("server", "session_dir")
         except (configparser.NoSectionError, configparser.NoOptionError):
             self.session_dir = os.path.expanduser("~/.cache/poit/")
 
@@ -156,9 +158,9 @@ class ConfigManager():
         if save_to_file:
             if url:
                 self.endpoint = url
-                self._parser.set("session", "endpoint", url)
+                self._parser.set("server", "endpoint", url)
             else:
-                self._parser.remove_option("session", "endpoint")
+                self._parser.remove_option("server", "endpoint")
             self._dirty = True
         else:
             self.endpoint = url
