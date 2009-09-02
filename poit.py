@@ -246,9 +246,19 @@ class ConfigManager():
         logger.debug("Cookie value: " + val)
         return val
 
+    def set_security_policy(self, policy):
+        # XXX: assumes input is valid value
+        self._parser.set("security", "policy", policy)
+        self._dirty = True
+
+    def get_security_policy(self):
+        if self._parser.has_option("security", "policy"):
+            return self._parser.get("security", "policy")
+        else:
+            return "none"
+
     def force_https(self):
-        return self._parser.has_option("security", "force_https") and \
-               self._parser.getboolean("security", "force_https")
+        return self.get_security_policy() == "https"
 
     def check_session_dir(self):
         '''Check that session storage directory exists has correct permissions'''
@@ -547,6 +557,9 @@ def setup_option_parser():
                       help="Set a new passphrase")
     parser.add_option("--endpoint", dest="endpoint",
                       help='Set server endpoint URL; clear by setting to ""')
+    parser.add_option("--security", dest="policy",
+                      type="choice", choices=["none", "https"],
+                      help="Set server's security policy: none or https")
     parser.add_option("-v", "--verbose", action="store_true", dest="debug",
                       help="Show debugging messages")
 
@@ -604,6 +617,11 @@ def cli_main():
         for id in options.new_identity:
             cfg.add_identity(id)
             print("Added new identity: " + id)
+
+    if options.policy:
+        no_opts = False
+        cfg.set_security_policy(options.policy)
+        print("Setting security policy to: {0}".format(options.policy))
 
     if options.passphrase:
         no_opts = False
