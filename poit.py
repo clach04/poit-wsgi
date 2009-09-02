@@ -50,6 +50,9 @@ from openid.extensions.sreg import SRegRequest, SRegResponse
 from openid.store.filestore import FileOpenIDStore
 
 POIT_VERSION = "0.1_alpha"
+DEFAULT_CONFIG_FILES = [os.path.expanduser("~/.config/poit.conf"),
+                        os.path.expanduser("~/.poit.conf"),
+                        os.path.abspath("./poit.conf")]
 
 #######################################
 # Common functions
@@ -78,20 +81,23 @@ logger.setLevel(logging.DEBUG)
 
 
 class ConfigManager():
-    '''Manages configuration, profile and session information
+    '''Manages configuration, profile and session information'''
 
-    Search the following paths for the config file, in order:
-      * ~/.config/poit.conf
-      * ~/.poit.conf
-      * ./poit.conf
-    '''
+    @classmethod
+    def find_config_file(cls):
+        file = None
+        for f in DEFAULT_CONFIG_FILES:
+            if not os.path.exists(f):
+                logger.debug("`{0}' does not exist".format(f))
+                continue
+            file = f
+            break
+        return file
 
-    def __init__(self, config_mode=False):
+    def __init__(self, config_file):
         '''Constructor
-
-        If config_mode is true, do not throw exceptions when file does not exist
         '''
-        self.cfgfile = None
+        self.config_file = config_file
         self.session_dir = None
         self.endpoint = None
         self.debug = False
@@ -100,23 +106,8 @@ class ConfigManager():
         self._dirty = False
         self._parser = None
 
-        # Find and load configuration file
-        for f in [os.path.expanduser("~/.config/poit.conf"),
-                  os.path.expanduser("~/.poit.conf"),
-                  "./poit.conf"]:
-            if not os.path.exists(f):
-                logger.debug("`{0}' does not exist".format(f))
-                continue
-
-            self.cfgfile = f
-            break
-
-        if not (self.cfgfile or config_mode) :
-            logger.error("Configuration file not found")
-            raise exceptions.IOError("No configuration file found")
-
         self._parser = configparser.SafeConfigParser()
-        self._parser.read(self.cfgfile)
+        self._parser.read(self.config_file)
 
         # Sanity check values
         if not self._parser.has_section("passphrase"):
@@ -146,17 +137,18 @@ class ConfigManager():
         except (configparser.NoSectionError, configparser.NoOptionError):
             self.session_dir = os.path.expanduser("~/.cache/poit/")
 
-        if not config_mode and not self.check_session_dir():
+        # FIXME: on OpenID request, reply with error
+        if not self.check_session_dir():
             raise exceptions.IOError("Session directory not writable: " + self.session_dir)
 
     def __del__(self):
         self.save()
 
     def save(self):
-        '''Saves configuration to file. Assumes cfgfile is set.'''
+        '''Saves configuration to file. Assumes config_file is set.'''
         if not self._dirty: return True
-        logger.info("Saving configuration to " + self.cfgfile)
-        with open(self.cfgfile, 'w') as f:
+        logger.info("Saving configuration to " + self.config_file)
+        with open(self.config_file, 'w') as f:
             self._parser.write(f)
 
     def set_endpoint(self, url, save_to_file=False):
@@ -398,9 +390,22 @@ def handle_sreg(cfg, request, response):
         sreg_resp = SRegResponse.extractResponse(sreg_req, cfg.sreg_fields())
         sreg_resp.toMessage(response.fields)
 
-def cgi_main(cfg):
+def cgi_main():
     cgitb.enable()
-    global request
+
+    # Load configuration
+    config_file = ConfigManager.find_config_file()
+    # FIXME: fail elegantly
+    if not config_file:
+        logger.error("No configuration file found")
+        raise IOError("No configuratoin file found")
+
+    try:
+        cfg = ConfigManager(config_file)
+    except configparser.ParsingError as e:
+        logger.error('Unable to parse config file: {0}'.format(err))
+        raise e
+
     ostore = FileOpenIDStore(cfg.session_dir)
 
     # Get CGI fields and put into a dict
@@ -545,11 +550,19 @@ def setup_option_parser():
 
     return parser
 
-def cli_main(cfg):
+def cli_main():
     parser = setup_option_parser()
     (options, args) = parser.parse_args()
 
     no_opts = True
+
+    # FIXME: make config file specifiable, and create one if non available
+    config_file = ConfigManager.find_config_file()
+    if not config_file:
+        print("No configuration file found")
+        sys.exit(1)
+
+    cfg = ConfigManager(ConfigManager.find_config_file())
 
     if options.endpoint is not None:
         no_opts = False
@@ -594,11 +607,6 @@ def cli_main(cfg):
 
 if __name__ == '__main__':
     if 'REQUEST_METHOD' in os.environ:
-        try:
-            cfg = ConfigManager()
-        except configparser.ParsingError as e:
-            logger.error('Unable to parse config file: {0}'.format(err))
-        cgi_main(cfg)
+        cgi_main()
     else:
-        cfg = ConfigManager(True)
-        cli_main(cfg)
+        cli_main()
