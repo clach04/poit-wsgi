@@ -20,7 +20,7 @@ import sys
 import urllib
 import pprint
 from datetime import datetime
-from optparse import OptionParser
+from optparse import OptionParser, OptionValueError
 
 import cgitb
 
@@ -556,7 +556,10 @@ def setup_option_parser():
 
 def cli_main():
     parser = setup_option_parser()
-    (options, args) = parser.parse_args()
+    try:
+        (options, args) = parser.parse_args()
+    except OptionValueError:
+        sys.exit(1)
 
     no_opts = True
 
@@ -622,8 +625,8 @@ def cli_main():
 
     if no_opts:
         parser.print_help()
-
-    cfg.save()
+    else:
+        cfg.save()
 
     if options.debug:
         logger.flush()
