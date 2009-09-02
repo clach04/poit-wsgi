@@ -120,8 +120,6 @@ class ConfigManager():
 
         if not self._keys_exist:
             logger.warning("Passphrase not set")
-        if not self._parser.has_section("ids"):
-            self._parser.add_section("ids")
 
         if self._parser.has_option("server", "endpoint"):
             self.endpoint = self._parser.get("server", "endpoint")
