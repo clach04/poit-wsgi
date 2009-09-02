@@ -109,9 +109,12 @@ class ConfigManager():
         self._parser = configparser.SafeConfigParser()
         self._parser.read(self.config_file)
 
+        # Make sure all the sections exist
+        for s in ["passphrase", "server", "ids", "ui", "security"]:
+            try: self._parser.add_section(s)
+            except configparser.DuplicateSectionError: pass
+
         # Sanity check values
-        if not self._parser.has_section("passphrase"):
-            self._parser.add_section("passphrase")
         self._keys_exist = self._parser.has_option("passphrase", "md5") and \
                            self._parser.has_option("passphrase", "sha512")
 
@@ -120,8 +123,6 @@ class ConfigManager():
         if not self._parser.has_section("ids"):
             self._parser.add_section("ids")
 
-        if not self._parser.has_section("server"):
-            self._parser.add_section("server")
         if self._parser.has_option("server", "endpoint"):
             self.endpoint = self._parser.get("server", "endpoint")
 
