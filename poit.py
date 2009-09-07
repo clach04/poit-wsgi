@@ -345,9 +345,7 @@ class Session:
         except KeyError:
             self._cookie = None
 
-        self._check_auth()
-
-    def _check_auth(self):
+    def check_authentication(self):
         if self._cookie and \
            self.config.validate_cookie_val(self._cookie["poit_session"].value):
             logger.info("Authenticated cookie session")
@@ -442,11 +440,13 @@ def cgi_main():
         logger.flush()
         return
 
+    session = Session(cfg, cgi_request)
+
     # Redirect to HTTPS if required
     if type(request) == CheckIDRequest and \
             cfg.force_https() and \
-            ('HTTPS' not in os.environ or os.environ['HTTPS'] != 'on'):
-        print("location: {endpoint}?{fields}\n".format(
+            not session.is_secure():
+        response.redirect_url = "{endpoint}?{fields}".format(
                     endpoint = re.sub("^http:", "https:", cfg.endpoint),
                     fields = urllib.urlencode(cgi_request.openid)))
         return
