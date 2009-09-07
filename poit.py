@@ -33,12 +33,14 @@ if py_version[0] == 3:
     import urllib.parse as urlparse
     from http.cookies import SimpleCookie
     from http import cookies
+    from http import client as http_status
 elif py_version[1] >= 6:
     import ConfigParser as configparser
     import urlparse
     from exceptions import IOError
     import Cookie as cookies
     from Cookie import SimpleCookie
+    import httplib as http_status
 else:
     print('unsupported version of Python')
     sys.exit(1)
@@ -48,6 +50,7 @@ from openid.server import server
 from openid.server.server import Server as OpenIDServer, CheckIDRequest, CheckAuthRequest
 from openid.extensions.sreg import SRegRequest, SRegResponse
 from openid.store.filestore import FileOpenIDStore
+from openid.store.memstore import MemoryStore
 
 POIT_VERSION = "0.1_alpha"
 DEFAULT_CONFIG_FILES = [os.path.expanduser("~/.config/poit.conf"),
@@ -346,6 +349,8 @@ class Session:
             self._cookie = None
 
     def check_authentication(self):
+        if not self.config: return
+
         if self._cookie and \
            self.config.validate_cookie_val(self._cookie["poit_session"].value):
             logger.info("Authenticated cookie session")
@@ -385,8 +390,95 @@ class Session:
     def expire(self):
         self.renew(0)
 
+    def get_cookie(self):
+        return self._cookie
+
     def cookie_output(self):
         return self._cookie.output() if self._cookie else ""
+
+
+class CGIResponse(list):
+    """Wraps all HTTP and HTML output"""
+    def __init__(self):
+        self.session = None
+
+        # OpenID request and response
+        self.request = None
+        self.response = None
+        self.identity = None
+
+        self.error = None
+        self.cookie = None
+        self.redirect_url = None
+        self.headers = {}
+
+    def set_content_type(self, type):
+        if type:
+            self.headers["Content-Type"] = type
+        else:
+            del self.headers["Content-Type"]
+
+    def _append_form(self):
+        form_action = self.session.config.endpoint
+        if self.session.is_secure():
+            # XXX: Preserve GET fields?
+            form_action = re.sub("^http:", "https:", form_action)
+
+        self.append('''<form action="{0}" method="post">
+                <input type="password" name="passphrase" size="20" />
+                <button type="submit">Authorize</button>'''.format(form_action))
+
+        for (name, value) in self.session.cgi_request.openid.items():
+            self.append('<input type="hidden" name="{0}" value="{1}" />'.format(name, value))
+
+        self.append('</form>')
+        if self.request:
+            self.append('<a href="%s">Reject</a>' % (self.request.getCancelURL(),))
+
+    def _build_body(self):
+        config = self.session.config
+
+        self.append("<html><head><title>poit</title></head><body>")
+
+        if config:
+            if self.session.auth_status() != Session.AUTHENTICATED:
+                self._append_form()
+        else:
+            self.append("NO CONFIGURATION FILE")
+
+        if config.debug:
+            self.append("<pre>")
+            self.append(logger.flush)
+            self.append("</pre>")
+
+        self.append("</body></html>")
+        pass
+
+    def output(self, file=sys.stdout):
+        if self.redirect_url:
+            print('Location:', self.redirect_url, file=file)
+            print('', file=file)
+        elif self.response:
+            for (header, value) in self.response.headers.items():
+                print("{0}: {1}".format(header, value), file=file)
+            if self.cookie:
+                print(self.cookie.output(), file=file)
+            print('', file=file)
+            print(self.response.body, file=file)
+        else:
+            self._build_body()
+            
+            for (header, value) in self.headers.items():
+                print("{0}: {1}".format(header, value), file=file)
+            if self.cookie:
+                print(self.cookie.output(), file=file)
+            print('', file=file)
+
+            for data in self:
+                if type(data) is str:
+                    print(data, end='', file=file)
+                else:
+                    data(file)
 
 
 def handle_sreg(cfg, request, response):
@@ -399,34 +491,94 @@ def handle_sreg(cfg, request, response):
         sreg_resp = SRegResponse.extractResponse(sreg_req, cfg.sreg_fields())
         sreg_resp.toMessage(response.fields)
 
+def handle_openid(session, server, request, response):
+    response.session = session
+    oid_response = None
+    cfg = session.config
+
+    if type(request) == CheckIDRequest:
+        # Reject if identity is not accepable
+        auth_stat = session.auth_status()
+        if not cfg.validate_id(request.identity):
+            logger.info("Invalid ID: " + request.identity)
+            oid_response = False
+        elif auth_stat == Session.AUTHENTICATED:
+            oid_response = True
+        elif request.immediate:
+            logger.info("Rejected immediate_mode")
+            oid_response = False
+        elif auth_stat == Session.BAD_PASSPHRASE:
+            logger.info("Bad passphrase")
+            oid_response = False
+        else:
+            logger.info("Prompt for passphrase")
+            response.set_content_type('text/html')
+            response.request = request
+            return response
+
+        logger.info("Session validation: " + ("SUCCESS" if oid_response else "FAILURE"))
+
+        if oid_response:
+            session.renew(cfg.timeout)
+            response.cookie = session.get_cookie()
+
+        oid_response = request.answer(oid_response)
+        handle_sreg(cfg, request, oid_response)
+
+        logger.debug("Response:\n" + oid_response.encodeToKVForm())
+    else:
+        try:
+            oid_response = server.handleRequest(request)
+        except NotImplementedError as e:
+            oid_response = server.OpenIDResponse(None)
+            oid_response.fields['error'] = str(e)
+            return
+
+    # encode response
+    oid_response = server.encodeResponse(oid_response)
+
+    response.response = oid_response
+
+    return response
+
+def handle_normal(session, response):
+    response.set_content_type('text/html')
+    return response
+
 def cgi_main():
     cgitb.enable()
 
+    cgi_request = CGIParser()
+    response = CGIResponse()
+
     # Load configuration
     config_file = ConfigManager.find_config_file()
-    # FIXME: fail elegantly
+
     if not config_file:
         logger.error("No configuration file found")
-        raise IOError("No configuratoin file found")
+        response.error = "No poit configuration file found"
+        cfg = None
+    else:
+        try:
+            cfg = ConfigManager(config_file)
+        except configparser.ParsingError as e:
+            logger.error('Unable to parse config file: {0}'.format(err))
+            response.error = "Error parsing poit configuration file"
 
-    try:
-        cfg = ConfigManager(config_file)
-    except configparser.ParsingError as e:
-        logger.error('Unable to parse config file: {0}'.format(err))
-        raise e
+    if cfg:
+        # Make sure an endpoint is set
+        if not cfg.endpoint:
+            cfg.set_endpoint(cgi_request.self_uri(cfg, https=cfg.force_https()))
 
-    ostore = FileOpenIDStore(cfg.session_dir)
-
-    # Get CGI fields and put into a dict
-    cgi_request = CGIParser()
-
-    # Make sure an endpoint is set
-    if not cfg.endpoint:
-        cfg.set_endpoint(cgi_request.self_uri(cfg, https=cfg.force_https()))
-
-    logger.debug("Endpoint: " + cfg.endpoint)
-    oserver = OpenIDServer(ostore, cfg.endpoint)
-    logger.debug("Initialized server")
+        logger.debug("Endpoint: " + cfg.endpoint)
+        ostore = FileOpenIDStore(cfg.session_dir)
+        oserver = OpenIDServer(ostore, cfg.endpoint)
+        logger.debug("Initialized server")
+    else:
+        # Stilll need to create a OpenIDServer to parse the request
+        ostore = MemoryStore()
+        oserver = OpenIDServer(ostore, "")
+        logger.debug("Initialized dummy server")
 
     # Decode request
     try:
@@ -435,114 +587,28 @@ def cgi_main():
         logger.warn("Not an OpenID request: " + str(err))
         request = None
 
-    if not request:
-        print("Content-Type: text/plain\n")
-        logger.flush()
-        return
-
     session = Session(cfg, cgi_request)
+    response.session = session
 
     # Redirect to HTTPS if required
-    if type(request) == CheckIDRequest and \
-            cfg.force_https() and \
-            not session.is_secure():
+    if (not session.is_secure()) and cfg.force_https() and \
+            ((not request) or type(request) == CheckIDRequest):
         response.redirect_url = "{endpoint}?{fields}".format(
                     endpoint = re.sub("^http:", "https:", cfg.endpoint),
-                    fields = urllib.urlencode(cgi_request.openid)))
+                    fields = urllib.urlencode(cgi_request.openid))
+        response.output()
         return
 
-    session = Session(cfg, cgi_request)
-    response = None
+    session.check_authentication()
 
-    if type(request) == CheckIDRequest:
-        # Reject if identity is not accepable
-        auth_stat = session.auth_status()
-        if not cfg.validate_id(request.identity):
-            logger.info("Invalid ID: " + request.identity)
-            response = False
-        elif auth_stat == Session.AUTHENTICATED:
-            response = True
-        elif request.immediate:
-            logger.info("Rejected immediate_mode")
-            response = False
-        elif auth_stat == Session.BAD_PASSPHRASE:
-            logger.info("Bad passphrase")
-            response = False
-        else:
-            logger.info("Prompt for passphrase")
-            if "REDIRECT_URL" in os.environ:
-                redirect = os.environ['REDIRECT_URL']
-                if cfg.force_https():
-                    redirect = re.sub(r'^http:', 'https:', os.environ['REDIRECT_URL'])
-            else:
-                redirect = ("https" if os.environ.get("HTTPS", None) == "on" else "http") + \
-                           "://" + os.environ["HTTP_HOST"] + os.environ["SCRIPT_NAME"]
-
-            print("Content-Type: text/html\n")
-            print('''<html><head><title>OpenID authenticate</title></head>
-                <body>
-                <form action="{0}" method="post">
-                    <input type="password" name="passphrase" size="20" />
-                    <button type="submit">Authorize</button>'''.format(redirect))
-
-            for (name, value) in cgi_request.openid.items():
-                print('<input type="hidden" name="{0}" value="{1}" />'.format(name, value))
-
-            print('</form>')
-            print('<a href="%s">Reject</a>' % (request.getCancelURL(),))
-
-            if cfg.debug:
-                print('<pre>')
-                logger.flush()
-                print('</pre></body></html>')
-
-            sys.exit()
-
-
-        logger.info("Session validation: " + ("SUCCESS" if response else "FAILURE"))
-
-        if response:
-            session.renew(cfg.timeout)
-
-        response = request.answer(response)
-        handle_sreg(cfg, request, response)
-
-        logger.debug("Response:\n" + response.encodeToKVForm())
+    if request:
+        handle_openid(session, oserver, request, response)
     else:
-        try:
-            response = oserver.handleRequest(request)
-        except NotImplementedError:
-            print('Status: 406 Not OpenID request')
-            print('Content-Type: text/plain\n')
-            return
-
+        handle_normal(session, response)
 
     ostore.cleanup()
+    response.output()
 
-    # encode response
-    response = oserver.encodeResponse(response)
-
-
-    # Output
-    if cfg.debug:
-        print('Content-Type: text/html\n')
-        print('<html><body><pre>')
-
-    for header in response.headers.items():
-        print('%s: %s' % header)
-    cookie = session.cookie_output()
-    if cookie:
-        logger.debug("Cookie: " + cookie)
-        print(cookie)
-    print("")
-    print(response.body)
-
-    if cfg.debug:
-        print("=== LOG ===")
-        logger.flush()
-        if "location" in response.headers:
-            print('<a href="{0}">Proceed</a>'.format(response.headers["location"]))
-        print("</pre></body></html>")
 
 #######################################
 # Commandline mode functions
