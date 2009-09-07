@@ -7,7 +7,6 @@ from __future__ import print_function
 
 import cgi
 import base64
-import exceptions
 import getpass
 import hashlib
 import logging
@@ -37,6 +36,7 @@ if py_version[0] == 3:
 elif py_version[1] >= 6:
     import ConfigParser as configparser
     import urlparse
+    from exceptions import IOError
     import Cookie as cookies
     from Cookie import SimpleCookie
 else:
@@ -140,7 +140,7 @@ class ConfigManager():
 
         # FIXME: on OpenID request, reply with error
         if not self.check_session_dir():
-            raise exceptions.IOError("Session directory not writable: " + self.session_dir)
+            raise IOError("Session directory not writable: " + self.session_dir)
 
     def __del__(self):
         self.save()
@@ -196,7 +196,7 @@ class ConfigManager():
     def validate_id(self, id):
         try:
             return self._parser.get("ids", ConfigManager._hash_identity(id)) == id
-        except configparser.NoOptionError, configparser.NoSectionError:
+        except (configparser.NoOptionError, configparser.NoSectionError):
             return False
 
     def get_passphrase_hash(self, hash):
@@ -219,7 +219,7 @@ class ConfigManager():
             salt = base64.b64decode(vals[0])
             time_str = vals[1]
             hash = base64.b64decode(vals[2])
-        except IndexError, TypeError:
+        except (IndexError, TypeError):
             logger.warn("Malformed cookie value: " + val)
             return False
 
@@ -265,7 +265,7 @@ class ConfigManager():
         # TODO: sanity check permissions when pre-existing
         if not os.path.exists(self.session_dir):
             try:
-                os.makedirs(self.session_dir, 0700)
+                os.makedirs(self.session_dir, 0x1C0) # 0x1C0 = 0o700
             except OSError as e:
                 logger.error("Cannot create {dir}: {e}".format(self.session_dir, str(e)))
                 return False
