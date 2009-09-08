@@ -80,6 +80,7 @@ logging.setLoggerClass(BufferLogger)
 logger = logging.getLogger("buffered")
 logger.setLevel(logging.DEBUG)
 
+config = None
 
 class ConfigManager():
     '''Manages configuration, profile and session information'''
@@ -321,7 +322,7 @@ class CGIParser():
 
         logger.debug("OpenID fields:\n" + pprint.pformat(self.openid))
 
-    def self_uri(self, cfg, https=False):
+    def self_uri(self, https=False):
         return "{scheme}://{server}{uri}".format(
                     scheme = ("https" if (os.environ.get("HTTPS", None) == "on" or https) else "http"),
                     server = os.environ["HTTP_HOST"],
@@ -333,9 +334,8 @@ class Session:
     NO_SESSION = 1
     BAD_PASSPHRASE = 2
 
-    def __init__(self, config, cgi_request):
+    def __init__(self, cgi_request):
         logger.debug("Initializing session object")
-        self.config = config
         self.cgi_request = cgi_request
         self._auth = Session.NO_SESSION
         try:
@@ -347,15 +347,15 @@ class Session:
             self._cookie = None
 
     def check_authentication(self):
-        if not self.config: return
+        if not config: return
 
         if self._cookie and \
-           self.config.validate_cookie_val(self._cookie["poit_session"].value):
+           config.validate_cookie_val(self._cookie["poit_session"].value):
             logger.info("Authenticated cookie session")
             self._auth = Session.AUTHENTICATED
         else:
             try:
-                if self.config.validate_passphrase(self.cgi_request.post["passphrase"]):
+                if config.validate_passphrase(self.cgi_request.post["passphrase"]):
                     logger.info("Authenticated using passphrase")
                     self._auth = Session.AUTHENTICATED
                 else:
@@ -374,9 +374,9 @@ class Session:
         if not self._cookie:
             self._cookie = cookies.SimpleCookie()
 
-        endpoint = urlparse.urlparse(self.config.endpoint)
+        endpoint = urlparse.urlparse(config.endpoint)
 
-        self._cookie["poit_session"] = self.config.create_cookie_val()
+        self._cookie["poit_session"] = config.create_cookie_val()
         val = self._cookie["poit_session"]
         val["max-age"] = timeout
         val["domain"] = endpoint.netloc
@@ -417,7 +417,7 @@ class CGIResponse(list):
             del self.headers["Content-Type"]
 
     def _append_form(self):
-        form_action = self.session.config.endpoint
+        form_action = config.endpoint
         if self.session.is_secure():
             # XXX: Preserve GET fields?
             form_action = re.sub("^http:", "https:", form_action)
@@ -434,8 +434,6 @@ class CGIResponse(list):
             self.append('<a href="%s">Reject</a>' % (self.request.getCancelURL(),))
 
     def _build_body(self):
-        config = self.session.config
-
         self.append("<html><head><title>poit</title></head><body>")
 
         if config:
@@ -479,25 +477,24 @@ class CGIResponse(list):
                     data(file)
 
 
-def handle_sreg(cfg, request, response):
+def handle_sreg(request, response):
     """Handle any sreg data requests"""
     sreg_req = SRegRequest.fromOpenIDRequest(request)
     # Extract information if required
     if sreg_req.wereFieldsRequested():
-        fields = cfg.sreg_fields()
+        fields = config.sreg_fields()
         if not fields: return
-        sreg_resp = SRegResponse.extractResponse(sreg_req, cfg.sreg_fields())
+        sreg_resp = SRegResponse.extractResponse(sreg_req, config.sreg_fields())
         sreg_resp.toMessage(response.fields)
 
 def handle_openid(session, server, request, response):
     response.session = session
     oid_response = None
-    cfg = session.config
 
     if type(request) == CheckIDRequest:
         # Reject if identity is not accepable
         auth_stat = session.auth_status()
-        if not cfg.validate_id(request.identity):
+        if not config.validate_id(request.identity):
             logger.info("Invalid ID: " + request.identity)
             oid_response = False
         elif auth_stat == Session.AUTHENTICATED:
@@ -517,11 +514,11 @@ def handle_openid(session, server, request, response):
         logger.info("Session validation: " + ("SUCCESS" if oid_response else "FAILURE"))
 
         if oid_response:
-            session.renew(cfg.timeout)
+            session.renew(config.timeout)
             response.cookie = session.get_cookie()
 
         oid_response = request.answer(oid_response)
-        handle_sreg(cfg, request, oid_response)
+        handle_sreg(request, oid_response)
 
         logger.debug("Response:\n" + oid_response.encodeToKVForm())
     else:
@@ -544,6 +541,7 @@ def handle_normal(session, response):
     return response
 
 def cgi_main():
+    global config
     cgi_request = CGIParser()
     response = CGIResponse()
 
@@ -553,22 +551,22 @@ def cgi_main():
     if not config_file:
         logger.error("No configuration file found")
         response.error = "No poit configuration file found"
-        cfg = None
+        config = None
     else:
         try:
-            cfg = ConfigManager(config_file)
+            config = ConfigManager(config_file)
         except configparser.ParsingError as e:
             logger.error('Unable to parse config file: {0}'.format(err))
             response.error = "Error parsing poit configuration file"
 
-    if cfg:
+    if config:
         # Make sure an endpoint is set
-        if not cfg.endpoint:
-            cfg.set_endpoint(cgi_request.self_uri(cfg, https=cfg.force_https()))
+        if not config.endpoint:
+            config.set_endpoint(cgi_request.self_uri(https=config.force_https()))
 
-        logger.debug("Endpoint: " + cfg.endpoint)
-        ostore = FileOpenIDStore(cfg.session_dir)
-        oserver = OpenIDServer(ostore, cfg.endpoint)
+        logger.debug("Endpoint: " + config.endpoint)
+        ostore = FileOpenIDStore(config.session_dir)
+        oserver = OpenIDServer(ostore, config.endpoint)
         logger.debug("Initialized server")
     else:
         # Stilll need to create a OpenIDServer to parse the request
@@ -583,14 +581,14 @@ def cgi_main():
         logger.warn("Not an OpenID request: " + str(err))
         request = None
 
-    session = Session(cfg, cgi_request)
+    session = Session(cgi_request)
     response.session = session
 
     # Redirect to HTTPS if required
-    if (not session.is_secure()) and cfg.force_https() and \
+    if (not session.is_secure()) and config.force_https() and \
             ((not request) or type(request) == CheckIDRequest):
         response.redirect_url = "{endpoint}?{fields}".format(
-                    endpoint = re.sub("^http:", "https:", cfg.endpoint),
+                    endpoint = re.sub("^http:", "https:", config.endpoint),
                     fields = urllib.urlencode(cgi_request.openid))
         response.output()
         return
@@ -628,6 +626,7 @@ def setup_option_parser():
     return parser
 
 def cli_main():
+    global config
     parser = setup_option_parser()
     try:
         (options, args) = parser.parse_args()
@@ -664,11 +663,11 @@ def cli_main():
                 sys.exit(0)
 
     print("Using {0}".format(config_file))
-    cfg = ConfigManager(config_file)
+    config = ConfigManager(config_file)
 
     if options.endpoint is not None:
         no_opts = False
-        cfg.set_endpoint(options.endpoint, save_to_file=True)
+        config.set_endpoint(options.endpoint, save_to_file=True)
         if options.endpoint:
             print("Server endpoint is now: " + options.endpoint)
         else:
@@ -677,12 +676,12 @@ def cli_main():
     if options.new_identity:
         no_opts = False
         for id in options.new_identity:
-            cfg.add_identity(id)
+            config.add_identity(id)
             print("Added new identity: " + id)
 
     if options.policy:
         no_opts = False
-        cfg.set_security_policy(options.policy)
+        config.set_security_policy(options.policy)
         print("Setting security policy to: {0}".format(options.policy))
 
     if options.passphrase:
@@ -698,13 +697,13 @@ def cli_main():
             print("Passphrases do not match")
             sys.exit(1)
 
-        cfg.set_passphrase(new_pass)
+        config.set_passphrase(new_pass)
         print("New passphrase set")
 
     if no_opts:
         parser.print_help()
     else:
-        cfg.save()
+        config.save()
 
     if options.debug:
         logger.flush()
