@@ -372,7 +372,7 @@ class Session:
 
         endpoint = urlparse.urlparse(config.endpoint)
 
-        self._cookie["poit_session"] = config.create_cookie_val()
+        self._cookie["poit_session"] = (config.create_cookie_val() if timeout else '')
         val = self._cookie["poit_session"]
         val["max-age"] = timeout
         val["domain"] = endpoint.netloc
