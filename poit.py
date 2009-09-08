@@ -140,9 +140,6 @@ class ConfigManager():
         if not self.check_session_dir():
             raise IOError("Session directory not writable: " + self.session_dir)
 
-    def __del__(self):
-        self.save()
-
     def save(self):
         '''Saves configuration to file. Assumes config_file is set.'''
         if not self._dirty: return True
