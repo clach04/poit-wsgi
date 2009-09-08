@@ -351,7 +351,7 @@ class Session:
             self._auth = Session.AUTHENTICATED
         else:
             try:
-                if config.validate_passphrase(self.cgi_request.post["passphrase"]):
+                if config.validate_passphrase(self.cgi_request.post["poit.passphrase"]):
                     logger.info("Authenticated using passphrase")
                     self._auth = Session.AUTHENTICATED
                 else:
@@ -419,7 +419,7 @@ class CGIResponse(list):
             form_action = re.sub("^http:", "https:", form_action)
 
         self.append('''<form action="{0}" method="post">
-                <input type="password" name="passphrase" size="20" />
+                <input type="password" name="poit.passphrase" size="20" />
                 <button type="submit">Authorize</button>'''.format(form_action))
 
         for (name, value) in self.session.cgi_request.openid.items():
