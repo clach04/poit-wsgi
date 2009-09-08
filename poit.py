@@ -29,16 +29,12 @@ py_version = sys.version_info[:2]
 if py_version[0] == 3:
     import configparser
     import urllib.parse as urlparse
-    from http.cookies import SimpleCookie
     from http import cookies
-    from http import client as http_status
 elif py_version[1] >= 6:
     import ConfigParser as configparser
     import urlparse
     from exceptions import IOError
     import Cookie as cookies
-    from Cookie import SimpleCookie
-    import httplib as http_status
 else:
     print('unsupported version of Python')
     sys.exit(1)
