@@ -194,6 +194,9 @@ class ConfigManager():
         except (configparser.NoOptionError, configparser.NoSectionError):
             return False
 
+    def get_identities(self):
+        return [x[1] for x in self._parser.items("ids")]
+
     def get_passphrase_hash(self, hash):
         return self._parser.get("passphrase", hash)
 
@@ -397,6 +400,7 @@ class CGIResponse(list):
         self.request = None
         self.response = None
         self.identity = None
+        self.realm = None
 
         self.error = None
         self.cookie = None
@@ -415,9 +419,28 @@ class CGIResponse(list):
             # XXX: Preserve GET fields?
             form_action = re.sub("^http:", "https:", form_action)
 
-        self.append('''<form action="{0}" method="post">
-                <input type="password" name="poit.passphrase" size="20" />
-                <button type="submit">Authorize</button>'''.format(form_action))
+        self.append('<form action="{0}" method="post">'.format(form_action))
+        self.append('<p>Identify as ')
+
+        # if identity is False but not None, then have user select one
+        if (self.identity is not None) and (not self.identity):
+            ids = config.get_identities()
+            if len(ids) == 1:
+                self.identity = ids[0]
+                self.append('<strong>{0}</strong>'.format(self.identity))
+                self.append('<input type="hidden" name="poit.id" value="{0}" />'.format(self.identity))
+            else:
+                self.append('<select name="poit.id" size="1">')
+                for id in ids:
+                    self.append('<option>{0}</option>'.format(id))
+                self.append('</select>')
+        else:
+            self.append('<strong>{0}</strong>'.format(self.identity))
+
+        self.append(' to <strong>{0}</strong>?</p>'.format(self.realm))
+
+        self.append('''<input type="password" name="poit.passphrase" size="20" />
+                <button type="submit">Authorize</button>''')
 
         for (name, value) in self.session.cgi_request.openid.items():
             self.append('<input type="hidden" name="{0}" value="{1}" />'.format(name, value))
@@ -485,9 +508,28 @@ def handle_openid(session, server, request, response):
     oid_response = None
 
     if type(request) == CheckIDRequest:
-        # Reject if identity is not accepable
+        response.identity = request.identity
+        response.realm = request.trust_root
+
         auth_stat = session.auth_status()
-        if not config.validate_id(request.identity):
+
+        answer_id = None
+        if request.idSelect():
+            if 'poit.id' in session.cgi_request.post:
+                if config.validate_id(session.cgi_request.post['poit.id']):
+                    oid_response = (auth_stat == Session.AUTHENTICATED)
+                    answer_id = session.cgi_request.post['poit.id']
+                else:
+                    oid_response = False
+            else:
+                logger.info("Want user selected identity; prompt")
+                response.set_content_type('text/html')
+                response.request = request
+                response.identity = False
+                return response
+
+        # Reject if identity is not accepable
+        elif not config.validate_id(request.identity):
             logger.info("Invalid ID: " + request.identity)
             oid_response = False
         elif auth_stat == Session.AUTHENTICATED:
@@ -510,7 +552,7 @@ def handle_openid(session, server, request, response):
             session.renew(config.timeout)
             response.cookie = session.get_cookie()
 
-        oid_response = request.answer(oid_response)
+        oid_response = request.answer(oid_response, identity=answer_id)
         handle_sreg(request, oid_response)
 
         logger.debug("Response:\n" + oid_response.encodeToKVForm())
