@@ -427,7 +427,7 @@ class CGIResponse(list):
 
         self.append('</form>')
         if self.request:
-            self.append('<a href="%s">Reject</a>' % (self.request.getCancelURL(),))
+            self.append('<a href="{0}">Reject</a>'.format(self.request.getCancelURL()))
 
     def _build_body(self):
         self.append("<html><head><title>poit</title></head><body>")
