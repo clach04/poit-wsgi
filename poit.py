@@ -21,8 +21,6 @@ import pprint
 from datetime import datetime
 from optparse import OptionParser, OptionValueError
 
-import cgitb
-
 ###########################################
 
 ##
@@ -546,8 +544,6 @@ def handle_normal(session, response):
     return response
 
 def cgi_main():
-    cgitb.enable()
-
     cgi_request = CGIParser()
     response = CGIResponse()
 
