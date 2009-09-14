@@ -62,7 +62,7 @@ HTML_HEADER = '''<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w
 '''
 
 HTML_FORM_START = '<form action="{endpoint}" method="post" id="form_box">'
-HTML_IDENTITY = '<p id="identity">http://yangman.ca/poit/</p>'
+HTML_IDENTITY = '<p id="identity">{identity}</p>'
 HTML_REALM = '<p id="realm_box">Authenticate to<br/><span id="realm_str">{realm}</span></p>'
 HTML_FORM_PASSPHRASE = '''<p id="passphrase_box">
 <label id="passphrase_label">Passphrase<br/>
