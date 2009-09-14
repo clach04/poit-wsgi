@@ -71,6 +71,7 @@ HTML_FORM_PASSPHRASE = '''<p id="passphrase_box">
 HTML_FORM_HIDDEN = '<input type="hidden" name="{name}" value="{value}"/>'
 HTML_FORM_END = '''<div id="buttons">
   <button type="submit" name="poit.action" value="authenticate">Authenticate</button>
+  <button type="submit" name="poit.action" value="cancel">Cancel</button>
 </div></form>'''
 
 HTML_FOOTER = '''<p id="version">poit {version}</p>
@@ -370,7 +371,7 @@ class Session:
     def __init__(self, cgi_request):
         logger.debug("Initializing session object")
         self.cgi_request = cgi_request
-        self._auth = Session.NO_SESSION
+        self.authenticated = False
         try:
             self._cookie = cookies.SimpleCookie(os.environ["HTTP_COOKIE"])
         except cookies.CookieError as e:
@@ -379,28 +380,19 @@ class Session:
         except KeyError:
             self._cookie = None
 
-    def check_authentication(self):
-        if not config: return
-
-        if self._cookie and \
-           config.validate_cookie_val(self._cookie["poit_session"].value):
+    def check_session(self):
+        if not (config and self._cookie):
+            self.authenticated = False
+        elif config.validate_cookie_val(self._cookie["poit_session"].value):
             logger.info("Authenticated cookie session")
-            self._auth = Session.AUTHENTICATED
+            self.authenticated = True
         else:
-            try:
-                if config.validate_passphrase(self.cgi_request.post["poit.passphrase"]):
-                    logger.info("Authenticated using passphrase")
-                    self._auth = Session.AUTHENTICATED
-                else:
-                    self._auth = Session.BAD_PASSPHRASE
-            except KeyError:
-                return False
+            self.authenticated = False
+
+        return self.authenticated
 
     def is_secure(self):
         return os.environ.get("HTTPS", None) == "on"
-
-    def auth_status(self):
-        return self._auth
 
     def renew(self, timeout):
         logger.debug("Renew session for {0}s".format(timeout))
@@ -480,14 +472,12 @@ class CGIResponse(list):
             self.append(HTML_FORM_HIDDEN.format(name=name, value=value))
 
         self.append(HTML_FORM_END)
-        if self.request:
-            self.append('<a href="{0}">Reject</a>'.format(self.request.getCancelURL()))
 
     def _build_body(self):
         self.append(HTML_HEADER.format(stylesheet=config.get_stylesheet()))
 
         if config:
-            if self.session.auth_status() != Session.AUTHENTICATED or \
+            if not self.session.authenticated or \
                ((self.identity is not None) and (not self.identity)):
                 self._append_form()
         else:
@@ -538,7 +528,25 @@ def handle_sreg(request, response):
         sreg_resp = SRegResponse.extractResponse(sreg_req, config.sreg_fields())
         sreg_resp.toMessage(response.fields)
 
-def handle_openid(session, server, request, response):
+def handle_submit(session, request):
+    """Process form submit
+    Returns an action that the downstream handler should perform"""
+    if request.post['poit.action'] == 'authenticate':
+        if session.authenticated:
+            return 'authenticate'
+        elif 'poit.passphrase' in request.post and \
+                config.validate_passphrase(request.post['poit.passphrase']):
+            logger.info("Authenticated using passphrase")
+            session.authenticated = True
+            return 'authenticate'
+        else:
+            return 'ask_again'
+    elif request.post['poit.action'] == 'cancel':
+        return 'cancel'
+
+    return None
+
+def handle_openid(session, server, request, response, action):
     response.session = session
     oid_response = None
 
@@ -546,13 +554,11 @@ def handle_openid(session, server, request, response):
         response.identity = request.identity
         response.realm = request.trust_root
 
-        auth_stat = session.auth_status()
-
         answer_id = None
         if request.idSelect():
             if 'poit.id' in session.cgi_request.post:
                 if config.validate_id(session.cgi_request.post['poit.id']):
-                    oid_response = (auth_stat == Session.AUTHENTICATED)
+                    oid_response = session.authenticated
                     answer_id = session.cgi_request.post['poit.id']
                 else:
                     oid_response = False
@@ -563,17 +569,16 @@ def handle_openid(session, server, request, response):
                 response.identity = False
                 return response
 
+        elif action == 'cancel':
+            oid_response = False
         # Reject if identity is not accepable
         elif not config.validate_id(request.identity):
             logger.info("Invalid ID: " + request.identity)
             oid_response = False
-        elif auth_stat == Session.AUTHENTICATED:
+        elif session.authenticated:
             oid_response = True
         elif request.immediate:
             logger.info("Rejected immediate_mode")
-            oid_response = False
-        elif auth_stat == Session.BAD_PASSPHRASE:
-            logger.info("Bad passphrase")
             oid_response = False
         else:
             logger.info("Prompt for passphrase")
@@ -663,10 +668,17 @@ def cgi_main():
         response.output()
         return
 
-    session.check_authentication()
+    session.check_session()
+
+    if 'poit.action' in cgi_request.post:
+        action = handle_submit(session, cgi_request)
+    else:
+        action = None
+
+    # TODO: handle ask_again
 
     if request:
-        handle_openid(session, oserver, request, response)
+        handle_openid(session, oserver, request, response, action)
     else:
         handle_normal(session, response)
 
