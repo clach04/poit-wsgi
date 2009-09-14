@@ -300,6 +300,12 @@ class ConfigManager():
                 return False
         return True
 
+    def get_stylesheet(self):
+        try:
+            return self._parser.get('ui', 'stylesheet')
+        except (configparser.NoOptionError, configparser.NoSectionError):
+            return "poit.css"
+
     def sreg_fields(self):
         return dict(self._parser.items("sreg")) if self._parser.has_section("sreg") else None
 
@@ -478,7 +484,7 @@ class CGIResponse(list):
             self.append('<a href="{0}">Reject</a>'.format(self.request.getCancelURL()))
 
     def _build_body(self):
-        self.append(HTML_HEADER.format(stylesheet='poit.css'))
+        self.append(HTML_HEADER.format(stylesheet=config.get_stylesheet()))
 
         if config:
             if self.session.auth_status() != Session.AUTHENTICATED or \
