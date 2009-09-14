@@ -51,6 +51,37 @@ DEFAULT_CONFIG_FILES = [os.path.expanduser("~/.config/poit.conf"),
                         os.path.expanduser("~/.poit.conf"),
                         os.path.abspath("./poit.conf")]
 
+############################
+# HTML
+
+HTML_HEADER = '''<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html><head>
+  <title>OpenID Authentication Request</title>
+  <link rel="stylesheet" href="{stylesheet}" type="text/css" />
+</head><body>
+'''
+
+HTML_FORM_START = '<form action="{endpoint}" method="post" id="form_box">'
+HTML_IDENTITY = '<p id="identity">http://yangman.ca/poit/</p>'
+HTML_REALM = '<p id="realm_box">Authenticate to<br/><span id="realm_str">{realm}</span></p>'
+HTML_FORM_PASSPHRASE = '''<p id="passphrase_box">
+<label id="passphrase_label">Passphrase<br/>
+<input type="password" id="passphrase_input" name="poit.passphrase" size="20" /></label>
+</p>'''
+HTML_FORM_HIDDEN = '<input type="hidden" name="{name}" value="{value}"/>'
+HTML_FORM_END = '''<div id="buttons">
+  <button type="submit" name="poit.action" value="authenticate">Authenticate</button>
+</div></form>'''
+
+HTML_FOOTER = '''<p id="version">poit {version}</p>
+<script type="text/javascript">
+try{{document.getElementById('passphrase_input').focus();}}catch(e){{}}
+</script>
+</body></html>'''
+
+HTML_DEBUG_START = '<pre id="debug">'
+HTML_DEBUG_END = '</pre>'
+
 #######################################
 # Common functions
 
@@ -419,51 +450,49 @@ class CGIResponse(list):
             # XXX: Preserve GET fields?
             form_action = re.sub("^http:", "https:", form_action)
 
-        self.append('<form action="{0}" method="post">'.format(form_action))
-        self.append('<p>Identify as ')
+        self.append(HTML_FORM_START.format(endpoint=form_action))
 
         # if identity is False but not None, then have user select one
         if (self.identity is not None) and (not self.identity):
             ids = config.get_identities()
             if len(ids) == 1:
                 self.identity = ids[0]
-                self.append('<strong>{0}</strong>'.format(self.identity))
-                self.append('<input type="hidden" name="poit.id" value="{0}" />'.format(self.identity))
+                self.append(HTML_IDENTITY.format(identity=self.identity))
+                self.append(HTML_FORM_HIDDEN.format(name='poit.id', value=self.identity))
             else:
                 self.append('<select name="poit.id" size="1">')
                 for id in ids:
                     self.append('<option>{0}</option>'.format(id))
                 self.append('</select>')
         else:
-            self.append('<strong>{0}</strong>'.format(self.identity))
+            self.append(HTML_IDENTITY.format(identity=self.identity))
 
-        self.append(' to <strong>{0}</strong>?</p>'.format(self.realm))
-
-        self.append('''<input type="password" name="poit.passphrase" size="20" />
-                <button type="submit">Authorize</button>''')
+        self.append(HTML_REALM.format(realm=self.realm))
+        self.append(HTML_FORM_PASSPHRASE)
 
         for (name, value) in self.session.cgi_request.openid.items():
-            self.append('<input type="hidden" name="{0}" value="{1}" />'.format(name, value))
+            self.append(HTML_FORM_HIDDEN.format(name=name, value=value))
 
-        self.append('</form>')
+        self.append(HTML_FORM_END)
         if self.request:
             self.append('<a href="{0}">Reject</a>'.format(self.request.getCancelURL()))
 
     def _build_body(self):
-        self.append("<html><head><title>poit</title></head><body>")
+        self.append(HTML_HEADER.format(stylesheet='poit.css'))
 
         if config:
-            if self.session.auth_status() != Session.AUTHENTICATED:
+            if self.session.auth_status() != Session.AUTHENTICATED or \
+               ((self.identity is not None) and (not self.identity)):
                 self._append_form()
         else:
             self.append("NO CONFIGURATION FILE")
 
         if config.debug:
-            self.append("<pre>")
+            self.append(HTML_DEBUG_START)
             self.append(logger.flush)
-            self.append("</pre>")
+            self.append(HTML_DEBUG_END)
 
-        self.append("</body></html>")
+        self.append(HTML_FOOTER.format(version=POIT_VERSION))
         pass
 
     def output(self, file=sys.stdout):
