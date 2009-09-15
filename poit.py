@@ -74,6 +74,10 @@ HTML_FORM_END = '''<div id="buttons">
   <button type="submit" name="poit.action" value="cancel">Cancel</button>
 </div></form>'''
 
+HTML_FORM_ID_SELECT_START = '<select name="poit.id" size="1">'
+HTML_FORM_ID_SELECT_OPTION = '<option>{identity}</option>'
+HTML_FORM_ID_SELECT_END = '</select>'
+
 HTML_FOOTER = '''<p id="version">poit {version}</p>
 <script type="text/javascript">
 try{{document.getElementById('passphrase_input').focus();}}catch(e){{}}
@@ -458,10 +462,10 @@ class CGIResponse(list):
                 self.append(HTML_IDENTITY.format(identity=self.identity))
                 self.append(HTML_FORM_HIDDEN.format(name='poit.id', value=self.identity))
             else:
-                self.append('<select name="poit.id" size="1">')
+                self.append(HTML_FORM_ID_SELECT_START)
                 for id in ids:
-                    self.append('<option>{0}</option>'.format(id))
-                self.append('</select>')
+                    self.append(HTML_FORM_ID_SELECT_START.format(identity=id))
+                self.append(HTML_FORM_ID_SELECT_END)
         else:
             self.append(HTML_IDENTITY.format(identity=self.identity))
 
