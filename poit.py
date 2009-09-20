@@ -496,17 +496,37 @@ class CGIResponse(list):
         pass
 
     def output(self, file=sys.stdout):
-        if self.redirect_url:
+        if self.redirect_url and not config.debug:
             print('Location:', self.redirect_url, file=file)
             print('', file=file)
         elif self.response:
-            for (header, value) in self.response.headers.items():
-                print("{0}: {1}".format(header, value), file=file)
-            if self.cookie:
-                print(self.cookie.output(), file=file)
-            print('', file=file)
-            print(self.response.body, file=file)
+            if not config.debug:
+                for (header, value) in self.response.headers.items():
+                    print("{0}: {1}".format(header, value), file=file)
+                if self.cookie:
+                    print(self.cookie.output(), file=file)
+                print('', file=file)
+                print(self.response.body, file=file)
+            else:
+                for (header, value) in self.response.headers.items():
+                    if header == "location":
+                        logger.info('Redirect: <a href="{0}">{0}</a>'.format(value))
+                    else:
+                        logger.debug("Header: {0}: {1}".format(header, value))
+                if self.cookie:
+                    logger.debug(self.cookie)
+
+                self._build_body()
+                print('Content-Type: text/html', file=file)
+                print('', file=file)
+                for data in self:
+                    if type(data) is str:
+                        print(data, end='', file=file)
+                    else:
+                        data(file)
         else:
+            if config.debug and self.redirect_url:
+                logger.info('Redirect: <a href="{0}">{0}</a>'.format(self.redirect_url))
             self._build_body()
             
             for (header, value) in self.headers.items():
