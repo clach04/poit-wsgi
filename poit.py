@@ -74,9 +74,9 @@ HTML_FORM_END = '''<div id="buttons">
   <button type="submit" name="poit.action" value="cancel">Cancel</button>
 </div></form>'''
 
-HTML_FORM_ID_SELECT_START = '<select name="poit.id" size="1">'
+HTML_FORM_ID_SELECT_START = '<p id="identity"><select name="poit.id" size="1">'
 HTML_FORM_ID_SELECT_OPTION = '<option>{identity}</option>'
-HTML_FORM_ID_SELECT_END = '</select>'
+HTML_FORM_ID_SELECT_END = '</select></p>'
 
 HTML_FOOTER = '''<p id="version">poit {version}</p>
 <script type="text/javascript">
@@ -464,7 +464,7 @@ class CGIResponse(list):
             else:
                 self.append(HTML_FORM_ID_SELECT_START)
                 for id in ids:
-                    self.append(HTML_FORM_ID_SELECT_START.format(identity=id))
+                    self.append(HTML_FORM_ID_SELECT_OPTION.format(identity=id))
                 self.append(HTML_FORM_ID_SELECT_END)
         else:
             self.append(HTML_IDENTITY.format(identity=self.identity))
