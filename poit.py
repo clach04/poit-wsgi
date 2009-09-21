@@ -109,6 +109,9 @@ class BufferLogger(logging.Logger):
         target.flush()
         self._handler.setTarget(None)
 
+    def html_mode(self):
+        self._formatter.format = lambda r: cgi.escape(logging.Formatter.format(self._formatter, r))
+
 # Initialize a global Logger instance
 logging.setLoggerClass(BufferLogger)
 logger = logging.getLogger("buffered")
@@ -660,6 +663,7 @@ def handle_normal(session, response):
     return response
 
 def cgi_main():
+    logger.html_mode()
     global config
     cgi_request = CGIParser()
     response = CGIResponse()
