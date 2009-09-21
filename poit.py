@@ -429,6 +429,40 @@ class Session:
         return self._cookie.output() if self._cookie else ""
 
 
+class PoitAction:
+    def __init__(self):
+        self.type = None
+        self.identity = None
+
+    def __str__(self):
+        return str({'type': self.type, 'identity': self.identity})
+
+    @classmethod
+    def from_request(cls, request, authenticated=False):
+        if 'poit.action' not in request:
+            return None
+
+        command = request['poit.action']
+        action = PoitAction()
+
+        if command == 'authenticate':
+            if authenticated:
+                action.type = 'authenticate'
+            elif 'poit.passphrase' in request and \
+                    config.validate_passphrase(request['poit.passphrase']):
+                logger.info("Authenticated using passphrase")
+                action.type = 'authenticate'
+            else:
+                action.type = 'ask_again'
+
+            action.identity = request.get('poit.id', None)
+
+        elif command == 'cancel':
+            action.type = 'cancel';
+
+        return action
+
+
 class CGIResponse(list):
     """Wraps all HTTP and HTML output"""
     def __init__(self):
@@ -557,24 +591,6 @@ def handle_sreg(request, response):
         sreg_resp = SRegResponse.extractResponse(sreg_req, config.sreg_fields())
         sreg_resp.toMessage(response.fields)
 
-def handle_submit(session, request):
-    """Process form submit
-    Returns an action that the downstream handler should perform"""
-    if request.post['poit.action'] == 'authenticate':
-        if session.authenticated:
-            return 'authenticate'
-        elif 'poit.passphrase' in request.post and \
-                config.validate_passphrase(request.post['poit.passphrase']):
-            logger.info("Authenticated using passphrase")
-            session.authenticated = True
-            return 'authenticate'
-        else:
-            return 'ask_again'
-    elif request.post['poit.action'] == 'cancel':
-        return 'cancel'
-
-    return None
-
 def handle_openid(session, server, request, response, action):
     response.session = session
     oid_response = None
@@ -584,11 +600,35 @@ def handle_openid(session, server, request, response, action):
         response.realm = request.trust_root
 
         answer_id = None
-        if request.idSelect():
-            if 'poit.id' in session.cgi_request.post:
-                if config.validate_id(session.cgi_request.post['poit.id']):
+
+        if action and action.type == 'cancel':
+            oid_response = False;
+        elif action and action.type == 'ask_again':
+            logger.info("Prompt for passphrase")
+            response.set_content_type('text/html')
+            response.request = request
+            if request.idSelect():
+                response.identity = False
+            return response
+
+        elif request.idSelect():
+            identityes = config.get_identities()
+            # identity_select mode
+            if action and action.identity:
+                if config.validate_id(action.identity):
                     oid_response = session.authenticated
-                    answer_id = session.cgi_request.post['poit.id']
+                    answer_id = action.identity
+                else:
+                    oid_response = False
+            elif request.immediate:
+                # If identity_select is invoked and in immediate mode,
+                # allow if session is already authenticated, AND there is
+                # only one available identity to choose from.
+                # Required for Facebook
+                ids = config.get_identities()
+                if len(ids) == 1:
+                    oid_response = (auth_stat == session.authenticated)
+                    answer_id = config.get_identities()[0]
                 else:
                     oid_response = False
             else:
@@ -598,8 +638,6 @@ def handle_openid(session, server, request, response, action):
                 response.identity = False
                 return response
 
-        elif action == 'cancel':
-            oid_response = False
         # Reject if identity is not accepable
         elif not config.validate_id(request.identity):
             logger.info("Invalid ID: " + request.identity)
@@ -609,11 +647,6 @@ def handle_openid(session, server, request, response, action):
         elif request.immediate:
             logger.info("Rejected immediate_mode")
             oid_response = False
-        else:
-            logger.info("Prompt for passphrase")
-            response.set_content_type('text/html')
-            response.request = request
-            return response
 
         logger.info("Session validation: " + ("SUCCESS" if oid_response else "FAILURE"))
 
@@ -699,12 +732,12 @@ def cgi_main():
 
     session.check_session()
 
-    if 'poit.action' in cgi_request.post:
-        action = handle_submit(session, cgi_request)
-    else:
-        action = None
+    action = PoitAction.from_request(cgi_request.post)
 
-    # TODO: handle ask_again
+    logger.debug("Action: " + str(action))
+
+    if action and action.type == 'authenticate' and not session.authenticated:
+        session.authenticated = True
 
     if request:
         handle_openid(session, oserver, request, response, action)
