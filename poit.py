@@ -537,52 +537,45 @@ class CGIResponse(list):
         pass
 
     def output(self, file=sys.stdout):
-        if self.redirect_url and not config.debug:
-            print('Location:', self.redirect_url, file=file)
-            print('', file=file)
-        elif self.response:
-            if not config.debug:
-                print('Content-Type: text/html', file=file)
-                for (header, value) in self.response.headers.items():
-                    print("{0}: {1}".format(header, value), file=file)
-                if self.cookie:
-                    print(self.cookie.output(), file=file)
-                print('', file=file)
-                print(self.response.body, file=file)
-            else:
-                for (header, value) in self.response.headers.items():
-                    if header == "location":
-                        logger.info('Redirect: <a href="{0}">{0}</a>'.format(value))
-                    else:
-                        logger.debug("Header: {0}: {1}".format(header, value))
-                if self.cookie:
-                    logger.debug(self.cookie)
-
-                self._build_body()
-                print('Content-Type: text/html', file=file)
-                print('', file=file)
-                for data in self:
-                    if type(data) is str:
-                        print(data, end='', file=file)
-                    else:
-                        data(file)
-        else:
-            if config.debug and self.redirect_url:
-                logger.info('Redirect: <a href="{0}">{0}</a>'.format(self.redirect_url))
-            self._build_body()
-            
-            print('Content-Type: text/html', file=file)
-            for (header, value) in self.headers.items():
-                print("{0}: {1}".format(header, value), file=file)
+        # Prepare output data
+        if config.debug:
+            if self.response:
+                logger.debug("OpenID response headers:\n" + pprint.pformat(self.response.headers))
+                if 'location' in self.response.headers:
+                    logger.info('OpenID redirect: <a href="{0}">{0}</a>'.format(self.response.headers['location']))
             if self.cookie:
-                print(self.cookie.output(), file=file)
-            print('', file=file)
+                logger.debug(self.cookie)
+            if self.redirect_url:
+                logger.info('Redirect: <a href="{0}">{0}</a>'.format(self.redirect_url))
 
-            for data in self:
-                if type(data) is str:
-                    print(data, end='', file=file)
-                else:
-                    data(file)
+            self._build_body()
+            headers = {}
+            body = self
+        else:
+            if self.redirect_url:
+                headers = {'Location': self.redirect_url}
+                body = []
+            elif self.response:
+                headers = self.response.headers
+                body = [self.response.body]
+            else:
+                self._build_body()
+                headers = self.headers
+                body = self
+
+        # Output
+        print('Content-Type: text/html', file=file)
+        for (header, value) in headers.items():
+            print("{0}: {1}".format(header, value), file=file)
+        if self.cookie:
+            print(self.cookie.output(), file=file)
+        print('', file=file)
+
+        for data in body:
+            if type(data) is str:
+                print(data, end='', file=file)
+            else:
+                data(file)
 
 
 def handle_sreg(request, response):
