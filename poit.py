@@ -356,8 +356,13 @@ class CGIParser():
                         self.openid[key] = val
                     else:
                         self.post[key] = val
-        logger.debug("POST fields:\n" + pprint.pformat(self.post))
 
+        if 'poit.passphrase' in self.post:
+            p = self.post.copy()
+            p['poit.passphrase'] = "**REMOVED**"
+            logger.debug("POST fields:\n" + pprint.pformat(p))
+        else:
+            logger.debug("POST fields:\n" + pprint.pformat(self.post))
         logger.debug("OpenID fields:\n" + pprint.pformat(self.openid))
 
     def self_uri(self, https=False):
