@@ -349,8 +349,6 @@ class CGIParser():
         content_length = int(os.environ.get("CONTENT_LENGTH", 0))
         if content_length:
             content = sys.stdin.read(content_length)
-            logger.debug("Content-Type: " + os.environ["CONTENT_TYPE"])
-            logger.debug("data:\n" + content)
             if os.environ["CONTENT_TYPE"].startswith("application/x-www-form-urlencoded"):
                 fields = urlparse.parse_qsl(content)
                 for (key, val) in fields:
