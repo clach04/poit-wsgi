@@ -479,12 +479,6 @@ class CGIResponse(list):
         self.redirect_url = None
         self.headers = {}
 
-    def set_content_type(self, type):
-        if type:
-            self.headers["Content-Type"] = type
-        else:
-            del self.headers["Content-Type"]
-
     def _append_form(self):
         form_action = config.endpoint
         if self.session.is_secure():
@@ -540,6 +534,7 @@ class CGIResponse(list):
             print('', file=file)
         elif self.response:
             if not config.debug:
+                print('Content-Type: text/html', file=file)
                 for (header, value) in self.response.headers.items():
                     print("{0}: {1}".format(header, value), file=file)
                 if self.cookie:
@@ -568,6 +563,7 @@ class CGIResponse(list):
                 logger.info('Redirect: <a href="{0}">{0}</a>'.format(self.redirect_url))
             self._build_body()
             
+            print('Content-Type: text/html', file=file)
             for (header, value) in self.headers.items():
                 print("{0}: {1}".format(header, value), file=file)
             if self.cookie:
@@ -605,7 +601,6 @@ def handle_openid(session, server, request, response, action):
             oid_response = False;
         elif action and action.type == 'ask_again':
             logger.info("Prompt for passphrase")
-            response.set_content_type('text/html')
             response.request = request
             if request.idSelect():
                 response.identity = False
@@ -633,7 +628,6 @@ def handle_openid(session, server, request, response, action):
                     oid_response = False
             else:
                 logger.info("Want user selected identity; prompt")
-                response.set_content_type('text/html')
                 response.request = request
                 response.identity = False
                 return response
@@ -674,7 +668,6 @@ def handle_openid(session, server, request, response, action):
     return response
 
 def handle_normal(session, response):
-    response.set_content_type('text/html')
     return response
 
 def cgi_main():
