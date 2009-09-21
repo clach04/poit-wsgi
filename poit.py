@@ -624,7 +624,7 @@ def handle_openid(session, server, request, response, action):
                 # Required for Facebook
                 ids = config.get_identities()
                 if len(ids) == 1:
-                    oid_response = (auth_stat == session.authenticated)
+                    oid_response = session.authenticated
                     answer_id = config.get_identities()[0]
                 else:
                     oid_response = False
