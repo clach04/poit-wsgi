@@ -78,6 +78,8 @@ HTML_FORM_ID_SELECT_START = '<p id="identity"><select name="poit.id" size="1">'
 HTML_FORM_ID_SELECT_OPTION = '<option>{identity}</option>'
 HTML_FORM_ID_SELECT_END = '</select></p>'
 
+HTML_ERROR_MESSAGE = '<p id="error">{message}</p>'
+
 HTML_FOOTER = '''<p id="version">poit {version}</p>
 <script type="text/javascript">
 try{{document.getElementById('passphrase_input').focus();}}catch(e){{}}
@@ -433,6 +435,7 @@ class PoitAction:
     def __init__(self):
         self.type = None
         self.identity = None
+        self.error = None
 
     def __str__(self):
         return str({'type': self.type, 'identity': self.identity})
@@ -453,6 +456,7 @@ class PoitAction:
                 logger.info("Authenticated using passphrase")
                 action.type = 'authenticate'
             else:
+                action.error = "Incorrect Passphrase"
                 action.type = 'ask_again'
 
             action.identity = request.get('poit.id', None)
@@ -503,6 +507,10 @@ class CGIResponse(list):
             self.append(HTML_IDENTITY.format(identity=self.identity))
 
         self.append(HTML_REALM.format(realm=self.realm))
+
+        if self.error:
+            self.append(HTML_ERROR_MESSAGE.format(message=self.error))
+
         self.append(HTML_FORM_PASSPHRASE)
 
         for (name, value) in self.session.cgi_request.openid.items():
@@ -604,6 +612,7 @@ def handle_openid(session, server, request, response, action):
             response.request = request
             if request.idSelect():
                 response.identity = False
+            response.error = action.error
             return response
 
         elif request.idSelect():

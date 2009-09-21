@@ -68,6 +68,18 @@ button {
 	text-align: right;
 }
 
+#error {
+	color: #600;
+	font-size: 8pt;
+	font-weight: bold;
+	font-variant: small-caps;
+	margin: 0 2em;
+	padding: 0.5em;
+	text-align: center;
+	background-color: #ff8;
+	border: #f66 2px dashed;
+}
+
 #version {
 	font-size: 6pt;
 	color: #777;
