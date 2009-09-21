@@ -375,10 +375,6 @@ class CGIParser():
 
 
 class Session:
-    AUTHENTICATED = 0
-    NO_SESSION = 1
-    BAD_PASSPHRASE = 2
-
     def __init__(self, cgi_request):
         logger.debug("Initializing session object")
         self.cgi_request = cgi_request
@@ -609,7 +605,6 @@ def handle_openid(session, server, request, response, action):
             return response
 
         elif request.idSelect():
-            identityes = config.get_identities()
             # identity_select mode
             if action and action.identity:
                 if config.validate_id(action.identity):
@@ -662,11 +657,7 @@ def handle_openid(session, server, request, response, action):
             oid_response.fields['error'] = str(e)
             return
 
-    # encode response
-    oid_response = server.encodeResponse(oid_response)
-
-    response.response = oid_response
-
+    response.response = server.encodeResponse(oid_response)
     return response
 
 def handle_normal(session, response):
