@@ -1,0 +1,49 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <title>OpenID Authentication Request</title>
+  <link rel="stylesheet" href="../poit.css" type="text/css" />
+</head>
+<body>
+
+
+<form action="passphrase.html" method="post" id="form_box">
+
+<p id="identity">http://yangman.ca/poit/</p>
+
+<p id="realm_box">Authenticate to<br/><span id="realm_str">domain.tld/service/</span></p>
+
+<p id="error">Incorrect Passphrase</p>
+
+<!--
+<p id="identity_box">
+<span class="label">Identity</span><br/>
+<span id="identity">http://yangman.ca/poit/</span>
+</p>
+-->
+
+<p id="passphrase_box">
+<label id="passphrase_label">Passphrase<br/>
+<input type="password" id="passphrase_input" name="poit.passphrase" size="20" /></label>
+</p>
+
+<div id="buttons">
+  <button type="submit" name="poit.action" value="authenticate">Authenticate</button>
+  <button type="submit" name="poit.action" value="cancel">Cancel</button>
+</div>
+                
+</form>
+
+<!--
+<pre id="debug">0123 DEBUG: foo
+</pre>
+-->
+
+<p id="version">poit 0.0_mockup</p>
+
+<script type="text/javascript">
+try{document.getElementById('passphrase_input').focus();}catch(e){}
+</script>
+
+</body>
+</html>
