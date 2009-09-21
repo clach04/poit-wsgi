@@ -469,7 +469,6 @@ class CGIResponse(list):
         self.session = None
 
         # OpenID request and response
-        self.request = None
         self.response = None
         self.identity = None
         self.realm = None
@@ -593,51 +592,50 @@ def handle_openid(session, server, request, response, action):
         response.realm = request.trust_root
 
         answer_id = None
+        oid_response = False
 
-        if action and action.type == 'cancel':
-            oid_response = False;
-        elif action and action.type == 'ask_again':
-            logger.info("Prompt for passphrase")
-            response.request = request
-            if request.idSelect():
-                response.identity = False
-            response.error = action.error
-            return response
-
-        elif request.idSelect():
-            # identity_select mode
-            if action and action.identity:
-                if config.validate_id(action.identity):
-                    oid_response = session.authenticated
-                    answer_id = action.identity
+        if request.immediate:
+            if session.authenticated:
+                if request.idSelect():
+                    ids = config.get_identities()
+                    if len(ids) == 1:
+                        answer_id = config.get_identities()[0]
+                        logger.info("Accept immedate_mode as '{0}'".format(answer_id))
+                        oid_response = True
+                    else:
+                        logger.info("Reject immedate_mode: identity_select required")
                 else:
-                    oid_response = False
-            elif request.immediate:
-                # If identity_select is invoked and in immediate mode,
-                # allow if session is already authenticated, AND there is
-                # only one available identity to choose from.
-                # Required for Facebook
-                ids = config.get_identities()
-                if len(ids) == 1:
-                    oid_response = session.authenticated
-                    answer_id = config.get_identities()[0]
-                else:
-                    oid_response = False
+                    logger.info("Accept immediate_mode")
+                    oid_response = True
             else:
+                logger.info("Reject immediate_mode: no session")
+        elif session.authenticated:
+            if request.idSelect():
+                if action and config.validate_id(action.identity):
+                    answer_id = action.identity
+                    oid_response = True
+                else:
+                    logger.info("Want user selected identity; prompt")
+                    return response
+            else:
+                if not config.validate_id(request.identity):
+                    logger.info("Invalid ID: " + request.identity)
+                else:
+                    oid_response = True
+        elif action:
+            if action.type == 'ask_again':
+                logger.info("Prompt for passphrase")
+                if request.idSelect():
+                    response.identity = False
+                response.error = action.error
+                return response
+            elif action.type != 'cancel':
+                logger.warn("Unexpected action: {0}".action.type)
+        else:
+            if request.idSelect():
                 logger.info("Want user selected identity; prompt")
-                response.request = request
                 response.identity = False
                 return response
-
-        # Reject if identity is not accepable
-        elif not config.validate_id(request.identity):
-            logger.info("Invalid ID: " + request.identity)
-            oid_response = False
-        elif session.authenticated:
-            oid_response = True
-        elif request.immediate:
-            logger.info("Rejected immediate_mode")
-            oid_response = False
 
         logger.info("Session validation: " + ("SUCCESS" if oid_response else "FAILURE"))
 
