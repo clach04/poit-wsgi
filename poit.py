@@ -527,6 +527,8 @@ class CGIResponse(list):
         if config.debug:
             self.append(HTML_DEBUG_START)
             self.append(logger.flush)
+            if self.redirect_url:
+                self.append('Redirect: <a href="{0}">{0}</a>'.format(self.redirect_url))
             self.append(HTML_DEBUG_END)
 
         self.append(HTML_FOOTER.format(version=POIT_VERSION))
@@ -538,11 +540,9 @@ class CGIResponse(list):
             if self.response:
                 logger.debug("OpenID response headers:\n" + pprint.pformat(self.response.headers))
                 if 'location' in self.response.headers:
-                    logger.info('OpenID redirect: <a href="{0}">{0}</a>'.format(self.response.headers['location']))
+                    self.redirect_url = self.response.headers['location']
             if self.cookie:
                 logger.debug(self.cookie)
-            if self.redirect_url:
-                logger.info('Redirect: <a href="{0}">{0}</a>'.format(self.redirect_url))
 
             self._build_body()
             headers = {}
