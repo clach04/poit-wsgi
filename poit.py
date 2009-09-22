@@ -388,16 +388,14 @@ class Session:
         except KeyError:
             self._cookie = None
 
-    def check_session(self):
-        if not (config and self._cookie):
-            self.authenticated = False
-        elif config.validate_cookie_val(self._cookie["poit_session"].value):
-            logger.info("Authenticated cookie session")
-            self.authenticated = True
-        else:
-            self.authenticated = False
-
-        return self.authenticated
+        if self._cookie:
+            # If cookie is found, check for session then purge it
+            try:
+                if config.validate_cookie_val(self._cookie["poit_session"].value):
+                    logger.info("Authenticated cookie session")
+                    self.authenticated = True
+            except KeyError: pass
+            self._cookie = None
 
     def is_secure(self):
         return os.environ.get("HTTPS", None) == "on"
@@ -420,9 +418,6 @@ class Session:
 
     def expire(self):
         self.renew(0)
-
-    def get_cookie(self):
-        return self._cookie
 
     def cookie_output(self):
         return self._cookie.output() if self._cookie else ""
@@ -475,7 +470,6 @@ class CGIResponse(list):
         self.realm = None
 
         self.error = None
-        self.cookie = None
         self.redirect_url = None
         self.headers = {}
 
@@ -541,9 +535,8 @@ class CGIResponse(list):
                 logger.debug("OpenID response headers:\n" + pprint.pformat(self.response.headers))
                 if 'location' in self.response.headers:
                     self.redirect_url = self.response.headers['location']
-            if self.cookie:
-                logger.debug(self.cookie)
 
+            logger.debug(self.session.cookie_output())
             self._build_body()
             headers = {}
             body = self
@@ -563,8 +556,8 @@ class CGIResponse(list):
         print('Content-Type: text/html', file=file)
         for (header, value) in headers.items():
             print("{0}: {1}".format(header, value), file=file)
-        if self.cookie:
-            print(self.cookie.output(), file=file)
+        cookie = self.session.cookie_output()
+        if cookie: print(cookie, file=file)
         print('', file=file)
 
         for data in body:
@@ -642,7 +635,6 @@ def handle_openid(session, server, request, response, action):
 
         if oid_response:
             session.renew(config.timeout)
-            response.cookie = session.get_cookie()
 
         oid_response = request.answer(oid_response, identity=answer_id)
         handle_sreg(request, oid_response)
@@ -715,8 +707,6 @@ def cgi_main():
                     fields = urllib.urlencode(cgi_request.openid))
         response.output()
         return
-
-    session.check_session()
 
     action = PoitAction.from_request(cgi_request.post)
 
