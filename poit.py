@@ -616,22 +616,19 @@ def handle_openid(session, server, request, response, action):
                     logger.info("Invalid ID: " + request.identity)
                 else:
                     oid_response = True
-        elif action:
-            if action.type == 'ask_again':
+        else:
+            if not action or action.type == 'ask_again':
                 logger.info("Prompt for passphrase")
                 if request.idSelect():
+                    logger.info("identity_select mode")
                     response.identity = False
-                response.error = action.error
+                if action:
+                    response.error = action.error
                 return response
-            elif action.type != 'cancel':
-                logger.warn("Unexpected action: {0}".action.type)
-        else:
-            if request.idSelect():
-                logger.info("Want user selected identity; prompt")
-                response.identity = False
-                return response
-
-        logger.info("Session validation: " + ("SUCCESS" if oid_response else "FAILURE"))
+            elif action.type == 'cancel':
+                logger.info("Reject: denied by user")
+            else:
+                logger.warn("Reject: Unexpected action: {0}".action.type)
 
         if oid_response:
             session.renew(config.timeout)
