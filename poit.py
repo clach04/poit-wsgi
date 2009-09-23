@@ -69,10 +69,11 @@ HTML_FORM_PASSPHRASE = '''<p id="passphrase_box">
 <input type="password" id="passphrase_input" name="poit.passphrase" size="20" /></label>
 </p>'''
 HTML_FORM_HIDDEN = '<input type="hidden" name="{name}" value="{value}"/>'
-HTML_FORM_END = '''<div id="buttons">
-  <button type="submit" name="poit.action" value="authenticate">Authenticate</button>
-  <button type="submit" name="poit.action" value="cancel">Cancel</button>
-</div></form>'''
+HTML_BUTTONS_START = '<div id="buttons">'
+HTML_BUTTON_AUTHENTICATE = '<button type="submit" name="poit.action" value="authenticate">Authenticate</button>'
+HTML_BUTTON_CANCEL = '<button type="submit" name="poit.action" value="cancel">Cancel</button>'
+HTML_BUTTONS_END = '</div>'
+HTML_FORM_END = '</form>'
 
 HTML_FORM_ID_SELECT_START = '<p id="identity"><select name="poit.id" size="1">'
 HTML_FORM_ID_SELECT_OPTION = '<option>{identity}</option>'
@@ -506,6 +507,10 @@ class CGIResponse(list):
         for (name, value) in self.session.cgi_request.openid.items():
             self.append(HTML_FORM_HIDDEN.format(name=name, value=value))
 
+        self.append(HTML_BUTTONS_START)
+        self.append(HTML_BUTTON_AUTHENTICATE)
+        self.append(HTML_BUTTON_CANCEL)
+        self.append(HTML_BUTTONS_END)
         self.append(HTML_FORM_END)
 
     def _build_body(self):
