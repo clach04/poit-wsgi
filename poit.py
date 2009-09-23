@@ -464,6 +464,7 @@ class CGIResponse(list):
     """Wraps all HTTP and HTML output"""
     def __init__(self):
         self.session = None
+        self.type = None
 
         # OpenID request and response
         self.response = None
@@ -474,56 +475,59 @@ class CGIResponse(list):
         self.redirect_url = None
         self.headers = {}
 
-    def _append_form(self):
+    def _build_body(self):
+        self.append(HTML_HEADER.format(stylesheet=config.get_stylesheet()))
+
         form_action = config.endpoint
         if self.session.is_secure():
-            # XXX: Preserve GET fields?
             form_action = re.sub("^http:", "https:", form_action)
 
         self.append(HTML_FORM_START.format(endpoint=form_action))
 
-        # if identity is False but not None, then have user select one
-        if (self.identity is not None) and (not self.identity):
-            ids = config.get_identities()
-            if len(ids) == 1:
-                self.identity = ids[0]
-                self.append(HTML_IDENTITY.format(identity=self.identity))
-                self.append(HTML_FORM_HIDDEN.format(name='poit.id', value=self.identity))
+        # Identity list
+        if self.type == 'openid_authenticate':
+            # if identity is False but not None, then have user select one
+            if (self.identity is not None) and (not self.identity):
+                ids = config.get_identities()
+                if len(ids) == 1:
+                    self.identity = ids[0]
+                    self.append(HTML_IDENTITY.format(identity=self.identity))
+                    self.append(HTML_FORM_HIDDEN.format(name='poit.id', value=self.identity))
+                else:
+                    self.append(HTML_FORM_ID_SELECT_START)
+                    for id in ids:
+                        self.append(HTML_FORM_ID_SELECT_OPTION.format(identity=id))
+                    self.append(HTML_FORM_ID_SELECT_END)
             else:
-                self.append(HTML_FORM_ID_SELECT_START)
-                for id in ids:
-                    self.append(HTML_FORM_ID_SELECT_OPTION.format(identity=id))
-                self.append(HTML_FORM_ID_SELECT_END)
-        else:
-            self.append(HTML_IDENTITY.format(identity=self.identity))
+                self.append(HTML_IDENTITY.format(identity=self.identity))
 
-        self.append(HTML_REALM.format(realm=self.realm))
+            self.append(HTML_REALM.format(realm=self.realm))
 
+        # Error message
         if self.error:
             self.append(HTML_ERROR_MESSAGE.format(message=self.error))
 
-        self.append(HTML_FORM_PASSPHRASE)
+        # Input fields
+        if self.type != 'error':
+            if not self.session.authenticated:
+                self.append(HTML_FORM_PASSPHRASE)
 
-        for (name, value) in self.session.cgi_request.openid.items():
-            self.append(HTML_FORM_HIDDEN.format(name=name, value=value))
+            self.append(HTML_BUTTONS_START)
+            if self.type == 'openid_authenticate':
+                self.append(HTML_BUTTON_AUTHENTICATE)
 
-        self.append(HTML_BUTTONS_START)
-        self.append(HTML_BUTTON_AUTHENTICATE)
-        self.append(HTML_BUTTON_CANCEL)
-        self.append(HTML_BUTTONS_END)
+            if self.type == 'openid_authenticate':
+                self.append(HTML_BUTTON_CANCEL)
+            self.append(HTML_BUTTONS_END)
+
+            # OpenID fields
+            for (name, value) in self.session.cgi_request.openid.items():
+                self.append(HTML_FORM_HIDDEN.format(name=name, value=value))
+
         self.append(HTML_FORM_END)
 
-    def _build_body(self):
-        self.append(HTML_HEADER.format(stylesheet=config.get_stylesheet()))
-
-        if config:
-            if not self.session.authenticated or \
-               ((self.identity is not None) and (not self.identity)):
-                self._append_form()
-        else:
-            self.append("NO CONFIGURATION FILE")
-
-        if config.debug:
+        # Debug log
+        if config and config.debug:
             self.append(HTML_DEBUG_START)
             self.append(logger.flush)
             if self.redirect_url:
@@ -534,6 +538,11 @@ class CGIResponse(list):
         pass
 
     def output(self, file=sys.stdout):
+        if self.type == 'no_config':
+            print('status: 500 poit: No configuration file found', file=file)
+            print('', file=file)
+            return
+
         # Prepare output data
         if config.debug:
             if self.response:
@@ -615,6 +624,7 @@ def handle_openid(session, server, request, response, action):
                     oid_response = True
                 else:
                     logger.info("PROMPT: Need identity selection")
+                    response.type = 'openid_authenticate'
                     return response
             else:
                 if not config.validate_id(request.identity):
@@ -624,6 +634,7 @@ def handle_openid(session, server, request, response, action):
         else:
             if not action or action.type == 'ask_again':
                 logger.info("PROMPT: {0} passphrase".format("Incorrect" if action else "Need"))
+                response.type = 'openid_authenticate'
                 if request.idSelect():
                     logger.info("identity_select mode")
                     response.identity = False
@@ -667,8 +678,9 @@ def cgi_main():
 
     if not config_file:
         logger.error("No configuration file found")
-        response.error = "No poit configuration file found"
-        config = None
+        response.type = 'no_config'
+        response.output()
+        return
     else:
         try:
             config = ConfigManager(config_file)
