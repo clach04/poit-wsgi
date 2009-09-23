@@ -599,31 +599,31 @@ def handle_openid(session, server, request, response, action):
                     ids = config.get_identities()
                     if len(ids) == 1:
                         answer_id = config.get_identities()[0]
-                        logger.info("Accept immedate_mode as '{0}'".format(answer_id))
+                        logger.info("ACCEPT (immediate): as '{0}'".format(answer_id))
                         oid_response = True
                     else:
-                        logger.info("Reject immedate_mode: identity_select required")
+                        logger.info("REJECT (immediate): need identity selection")
                 else:
-                    logger.info("Accept immediate_mode")
+                    logger.info("ACCEPT (immediate)")
                     oid_response = True
             else:
-                logger.info("Reject immediate_mode: no session")
+                logger.info("REJECT (immediate): no session")
         elif session.authenticated:
             if request.idSelect():
                 if action and config.validate_id(action.identity):
                     answer_id = action.identity
                     oid_response = True
                 else:
-                    logger.info("Want user selected identity; prompt")
+                    logger.info("PROMPT: Need identity selection")
                     return response
             else:
                 if not config.validate_id(request.identity):
-                    logger.info("Invalid ID: " + request.identity)
+                    logger.info("REJECT: Invalid ID: {0}".format(request.identity))
                 else:
                     oid_response = True
         else:
             if not action or action.type == 'ask_again':
-                logger.info("Prompt for passphrase")
+                logger.info("PROMPT: {0} passphrase".format("Incorrect" if action else "Need"))
                 if request.idSelect():
                     logger.info("identity_select mode")
                     response.identity = False
@@ -631,9 +631,9 @@ def handle_openid(session, server, request, response, action):
                     response.error = action.error
                 return response
             elif action.type == 'cancel':
-                logger.info("Reject: denied by user")
+                logger.info("REJECT: Denied by user")
             else:
-                logger.warn("Reject: Unexpected action: {0}".action.type)
+                logger.warn("REJECT: Unexpected action: {0}".format(action.type))
 
         if oid_response:
             session.renew(config.timeout)
