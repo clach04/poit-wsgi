@@ -667,15 +667,14 @@ def handle_openid(session, server, request, response, action):
 
 def handle_normal(session, response, action):
     if action:
-        if action.type == 'authenticate':
-            session.renew(config.timeout)
-        elif action.type == 'ask_again':
+        if action.type == 'ask_again':
             response.error = action.error
         elif action.type == 'expire':
             session.authenticated = False
             session.expire()
 
     if session.authenticated:
+        session.renew(config.timeout)
         response.type = 'plain_info'
     else:
         response.type = 'plain_authenticate'
