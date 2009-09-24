@@ -463,7 +463,6 @@ class PoitAction:
 class CGIResponse(list):
     """Wraps all HTTP and HTML output"""
     def __init__(self):
-        self.session = None
         self.type = None
 
         # OpenID request and response
@@ -475,11 +474,11 @@ class CGIResponse(list):
         self.redirect_url = None
         self.headers = {}
 
-    def _build_body(self):
+    def _build_body(self, session):
         self.append(HTML_HEADER.format(stylesheet=config.get_stylesheet()))
 
         form_action = config.endpoint
-        if self.session.is_secure():
+        if session.is_secure():
             form_action = re.sub("^http:", "https:", form_action)
 
         self.append(HTML_FORM_START.format(endpoint=form_action))
@@ -509,7 +508,7 @@ class CGIResponse(list):
 
         # Input fields
         if self.type != 'error':
-            if not self.session.authenticated:
+            if not session.authenticated:
                 self.append(HTML_FORM_PASSPHRASE)
 
             self.append(HTML_BUTTONS_START)
@@ -521,7 +520,7 @@ class CGIResponse(list):
             self.append(HTML_BUTTONS_END)
 
             # OpenID fields
-            for (name, value) in self.session.cgi_request.openid.items():
+            for (name, value) in session.cgi_request.openid.items():
                 self.append(HTML_FORM_HIDDEN.format(name=name, value=value))
 
         self.append(HTML_FORM_END)
@@ -537,7 +536,7 @@ class CGIResponse(list):
         self.append(HTML_FOOTER.format(version=POIT_VERSION))
         pass
 
-    def output(self, file=sys.stdout):
+    def output(self, session, file=sys.stdout):
         if self.type == 'no_config':
             print('status: 500 poit: No configuration file found', file=file)
             print('', file=file)
@@ -550,8 +549,8 @@ class CGIResponse(list):
                 if 'location' in self.response.headers:
                     self.redirect_url = self.response.headers['location']
 
-            logger.debug(self.session.cookie_output())
-            self._build_body()
+            logger.debug(session.cookie_output())
+            self._build_body(session)
             headers = {}
             body = self
         else:
@@ -562,7 +561,7 @@ class CGIResponse(list):
                 headers = self.response.headers
                 body = [self.response.body]
             else:
-                self._build_body()
+                self._build_body(session)
                 headers = self.headers
                 body = self
 
@@ -570,7 +569,7 @@ class CGIResponse(list):
         print('Content-Type: text/html', file=file)
         for (header, value) in headers.items():
             print("{0}: {1}".format(header, value), file=file)
-        cookie = self.session.cookie_output()
+        cookie = session.cookie_output()
         if cookie: print(cookie, file=file)
         print('', file=file)
 
@@ -592,7 +591,6 @@ def handle_sreg(request, response):
         sreg_resp.toMessage(response.fields)
 
 def handle_openid(session, server, request, response, action):
-    response.session = session
     oid_response = None
 
     if type(request) == CheckIDRequest:
@@ -679,7 +677,7 @@ def cgi_main():
     if not config_file:
         logger.error("No configuration file found")
         response.type = 'no_config'
-        response.output()
+        response.output(None)
         return
     else:
         try:
@@ -711,7 +709,6 @@ def cgi_main():
         request = None
 
     session = Session(cgi_request)
-    response.session = session
 
     # Redirect to HTTPS if required
     if (not session.is_secure()) and config.force_https() and \
@@ -719,7 +716,7 @@ def cgi_main():
         response.redirect_url = "{endpoint}?{fields}".format(
                     endpoint = re.sub("^http:", "https:", config.endpoint),
                     fields = urllib.urlencode(cgi_request.openid))
-        response.output()
+        response.output(session)
         return
 
     action = PoitAction.from_request(cgi_request.post)
@@ -735,7 +732,7 @@ def cgi_main():
         handle_normal(session, response)
 
     ostore.cleanup()
-    response.output()
+    response.output(session)
 
 
 #######################################
