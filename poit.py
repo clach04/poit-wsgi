@@ -72,6 +72,7 @@ HTML_FORM_HIDDEN = '<input type="hidden" name="{name}" value="{value}"/>'
 HTML_BUTTONS_START = '<div id="buttons">'
 HTML_BUTTON_AUTHENTICATE = '<button type="submit" name="poit.action" value="authenticate">Authenticate</button>'
 HTML_BUTTON_CANCEL = '<button type="submit" name="poit.action" value="cancel">Cancel</button>'
+HTML_BUTTON_LOGOUT = '<button type="submit" name="poit.action" value="expire">Expire Session</button>'
 HTML_BUTTONS_END = '</div>'
 HTML_FORM_END = '</form>'
 
@@ -454,8 +455,8 @@ class PoitAction:
 
             action.identity = request.get('poit.id', None)
 
-        elif command == 'cancel':
-            action.type = 'cancel';
+        elif command in ['cancel', 'expire']:
+            action.type = command
 
         return action
 
@@ -508,15 +509,17 @@ class CGIResponse(list):
 
         # Input fields
         if self.type != 'error':
-            if not session.authenticated:
+            if self.type == 'plain_authenticate' or not session.authenticated:
                 self.append(HTML_FORM_PASSPHRASE)
 
             self.append(HTML_BUTTONS_START)
-            if self.type == 'openid_authenticate':
+            if self.type in ['openid_authenticate', 'plain_authenticate']:
                 self.append(HTML_BUTTON_AUTHENTICATE)
 
             if self.type == 'openid_authenticate':
                 self.append(HTML_BUTTON_CANCEL)
+            elif self.type == 'plain_info':
+                self.append(HTML_BUTTON_LOGOUT)
             self.append(HTML_BUTTONS_END)
 
             # OpenID fields
@@ -662,7 +665,20 @@ def handle_openid(session, server, request, response, action):
     response.response = server.encodeResponse(oid_response)
     return response
 
-def handle_normal(session, response):
+def handle_normal(session, response, action):
+    if action:
+        if action.type == 'authenticate':
+            session.renew(config.timeout)
+        elif action.type == 'ask_again':
+            response.error = action.error
+        elif action.type == 'expire':
+            session.authenticated = False
+            session.expire()
+
+    if session.authenticated:
+        response.type = 'plain_info'
+    else:
+        response.type = 'plain_authenticate'
     return response
 
 def cgi_main():
@@ -729,7 +745,7 @@ def cgi_main():
     if request:
         handle_openid(session, oserver, request, response, action)
     else:
-        handle_normal(session, response)
+        handle_normal(session, response, action)
 
     ostore.cleanup()
     response.output(session)
