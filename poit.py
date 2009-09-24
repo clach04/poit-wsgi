@@ -510,14 +510,14 @@ class CGIResponse(list):
                 self.append(HTML_IDENTITY.format(identity=self.identity))
 
             self.append(HTML_REALM.format(realm=self.realm))
-        elif self.type == 'plain_info':
+        elif self.type == 'session_info':
             ids = config.get_identities()
             if len(ids) == 1:
                 self.append(HTML_IDENTITY.format(identity=ids[0]))
             else:
                 self.append(HTML_IDENTITY.format(identity="{0} identities available".format(len(ids))))
 
-        if self.type == 'plain_info':
+        if self.type == 'session_info':
             self.append(HTML_AUTHENTICATED_INFO)
 
         # Error message
@@ -526,7 +526,7 @@ class CGIResponse(list):
 
         # Input fields
         if self.type != 'error':
-            if self.type == 'plain_authenticate' or not session.authenticated:
+            if not session.authenticated:
                 self.append(HTML_FORM_PASSPHRASE)
 
             self.append(HTML_BUTTONS_START)
@@ -535,7 +535,7 @@ class CGIResponse(list):
 
             if self.type == 'openid_authenticate':
                 self.append(HTML_BUTTON_CANCEL)
-            elif self.type == 'plain_info':
+            elif self.type == 'session_info':
                 self.append(HTML_BUTTON_LOGOUT)
             self.append(HTML_BUTTONS_END)
 
@@ -692,7 +692,7 @@ def handle_normal(session, response, action):
 
     if session.authenticated:
         session.renew(config.timeout)
-        response.type = 'plain_info'
+        response.type = 'session_info'
     else:
         response.type = 'plain_authenticate'
     return response
