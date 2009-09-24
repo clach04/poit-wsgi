@@ -82,6 +82,10 @@ HTML_FORM_ID_SELECT_END = '</select></p>'
 
 HTML_ERROR_MESSAGE = '<p id="error">{message}</p>'
 
+HTML_AUTHENTICATED_INFO = '''<p class="info">You are already logged in to poit.</p>
+<p class="info">You can now authenticate to OpenID-supporting sites without being asked for your
+passphrase again.</p>'''
+
 HTML_FOOTER = '''<p id="version">poit {version}</p>
 <script type="text/javascript">
 try{{document.getElementById('passphrase_input').focus();}}catch(e){{}}
@@ -506,6 +510,15 @@ class CGIResponse(list):
                 self.append(HTML_IDENTITY.format(identity=self.identity))
 
             self.append(HTML_REALM.format(realm=self.realm))
+        elif self.type == 'plain_info':
+            ids = config.get_identities()
+            if len(ids) == 1:
+                self.append(HTML_IDENTITY.format(identity=ids[0]))
+            else:
+                self.append(HTML_IDENTITY.format(identity="{0} identities available".format(len(ids))))
+
+        if self.type == 'plain_info':
+            self.append(HTML_AUTHENTICATED_INFO)
 
         # Error message
         if self.error:

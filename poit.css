@@ -80,6 +80,12 @@ button {
 	border: #f66 2px dashed;
 }
 
+.info {
+	font-size: 80%;
+	color: #444;
+	margin: 1em 2em;
+}
+
 #version {
 	font-size: 6pt;
 	color: #777;
