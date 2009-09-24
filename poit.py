@@ -391,12 +391,16 @@ class Session:
             self._cookie = None
 
         if self._cookie:
-            # If cookie is found, check for session then purge it
+            # If cookie is found, check then purge it
             try:
-                if config.validate_cookie_val(self._cookie["poit_session"].value):
+                session = self._cookie['poit_session']
+            except KeyError:
+                pass
+            else:
+                if config.validate_cookie_val(session.value):
                     logger.info("Authenticated cookie session")
                     self.authenticated = True
-            except KeyError: pass
+
             self._cookie = None
 
     def is_secure(self):
