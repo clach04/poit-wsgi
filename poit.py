@@ -645,11 +645,15 @@ def handle_openid(session, server, request, response, action):
                     logger.info("PROMPT: Need identity selection")
                     response.type = 'openid_authenticate'
                     return response
-            else:
+            elif action:
                 if not config.validate_id(request.identity):
                     logger.info("REJECT: Invalid ID: {0}".format(request.identity))
                 else:
                     oid_response = True
+            else:
+                logger.info("PROMPT: checkid_setup mode")
+                response.type = 'openid_authenticate'
+                return response
         else:
             if not action or action.type == 'ask_again':
                 logger.info("PROMPT: {0} passphrase".format("Incorrect" if action else "Need"))
