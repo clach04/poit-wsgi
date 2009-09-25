@@ -52,6 +52,8 @@ DEFAULT_CONFIG_FILES = [os.path.expanduser("~/.config/poit.conf"),
                         os.path.abspath("./poit.conf")]
 DEFAULT_STYLESHEET = './poit.css'
 
+CONFIG_REALM_PREFIX = 'realm|'
+
 ############################
 # HTML
 
@@ -125,6 +127,12 @@ logger = logging.getLogger("buffered")
 logger.setLevel(logging.DEBUG)
 
 config = None
+
+class OpenIDRealm():
+    def __init__(self, url, allow_immediate=False):
+        self.url = url
+        self.allow_immedate = allow_immediate
+
 
 class ConfigManager():
     '''Manages configuration, profile and session information'''
@@ -325,6 +333,28 @@ class ConfigManager():
 
     def sreg_fields(self):
         return dict(self._parser.items("sreg")) if self._parser.has_section("sreg") else None
+
+    # Realm profiles
+    def get_realm(self, name):
+        section = CONFIG_REALM_PREFIX + name
+        if not self._parser.has_section(section):
+            return None
+
+        realm = OpenIDRealm(name)
+        try:
+            realm.allow_immediate = self._parser.getboolean(section, 'immediate')
+        except (configparser.NoSectionError, configparser.NoOptionError, ValueError):
+            realm.allow_immediate = False
+
+        return realm
+
+    def save_realm(self, realm):
+        section = CONFIG_REALM_PREFIX + realm.url
+        if not self._parser.has_section(section):
+            self._parser.add_section(section)
+
+        self._parser.set(section, 'immediate', str(realm.allow_immediate))
+        self._dirty = True
 
     
 #######################################
