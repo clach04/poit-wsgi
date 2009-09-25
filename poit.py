@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 # poit is copyright 2009 by Yang Zhao <yang@yangman.ca>
 # This file is distributed under terms of Apache License, Version 2.0
