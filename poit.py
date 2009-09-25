@@ -50,6 +50,7 @@ POIT_VERSION = "0.1_alpha"
 DEFAULT_CONFIG_FILES = [os.path.expanduser("~/.config/poit.conf"),
                         os.path.expanduser("~/.poit.conf"),
                         os.path.abspath("./poit.conf")]
+DEFAULT_STYLESHEET = './poit.css'
 
 ############################
 # HTML
@@ -320,7 +321,7 @@ class ConfigManager():
         try:
             return self._parser.get('ui', 'stylesheet')
         except (configparser.NoOptionError, configparser.NoSectionError):
-            return "poit.css"
+            return DEFAULT_STYLESHEET
 
     def sreg_fields(self):
         return dict(self._parser.items("sreg")) if self._parser.has_section("sreg") else None
