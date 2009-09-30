@@ -675,17 +675,18 @@ def handle_openid(session, server, request, response, action):
             if session.authenticated:
                 realm = config.get_realm(request.trust_root)
 
-                if request.idSelect():
-                    ids = config.get_identities()
-                    if len(ids) == 1:
-                        answer_id = config.get_identities()[0]
-                        logger.info("ACCEPT (immediate): as '{0}'".format(answer_id))
-                        oid_response = True
+                if realm and realm.allow_immediate:
+                    if request.idSelect():
+                        ids = config.get_identities()
+                        if len(ids) == 1:
+                            answer_id = config.get_identities()[0]
+                            logger.info("ACCEPT (immediate): as '{0}'".format(answer_id))
+                            oid_response = True
+                        else:
+                            logger.info("REJECT (immediate): need identity selection")
                     else:
-                        logger.info("REJECT (immediate): need identity selection")
-                elif realm and realm.allow_immediate:
-                    logger.info("ACCEPT (immediate)")
-                    oid_response = True
+                        logger.info("ACCEPT (immediate)")
+                        oid_response = True
                 else:
                     logger.info("REJECT (immediate): not allowed")
             else:
