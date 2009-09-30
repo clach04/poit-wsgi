@@ -83,6 +83,10 @@ HTML_FORM_ID_SELECT_START = '<p id="identity"><select name="poit.id" size="1">'
 HTML_FORM_ID_SELECT_OPTION = '<option>{identity}</option>'
 HTML_FORM_ID_SELECT_END = '</select></p>'
 
+HTML_CB_REMEMBER_BASE = '<label><input type="checkbox" name="poit.allow_immediate"{0}/>Remember approval</label>'
+HTML_CB_REMEMBER = HTML_CB_REMEMBER_BASE.format('')
+HTML_CB_REMEMBER_CHECKED = HTML_CB_REMEMBER_BASE.format(' checked="checked"')
+
 HTML_ERROR_MESSAGE = '<p id="error">{message}</p>'
 
 HTML_AUTHENTICATED_INFO = '''<p class="info">You are already logged in to poit.</p>
@@ -131,7 +135,16 @@ config = None
 class OpenIDRealm():
     def __init__(self, url, allow_immediate=False):
         self.url = url
-        self.allow_immedate = allow_immediate
+        self.allow_immediate = allow_immediate
+
+    def apply_action(self, action):
+        """Apply PoitAction realm profile changes"""
+        changed = False
+        if action.allow_immediate:
+            changed = (not self.allow_immediate)
+            self.allow_immediate = True
+
+        return changed
 
 
 class ConfigManager():
@@ -198,7 +211,9 @@ class ConfigManager():
 
     def save(self):
         '''Saves configuration to file. Assumes config_file is set.'''
-        if not self._dirty: return True
+        if not self._dirty:
+            logger.debug("No config file change")
+            return True
         logger.info("Saving configuration to " + self.config_file)
         with open(self.config_file, 'w') as f:
             self._parser.write(f)
@@ -469,6 +484,7 @@ class PoitAction:
         self.type = None
         self.identity = None
         self.error = None
+        self.allow_immediate = False
 
     def __str__(self):
         return str({'type': self.type, 'identity': self.identity})
@@ -493,6 +509,7 @@ class PoitAction:
                 action.type = 'ask_again'
 
             action.identity = request.get('poit.id', None)
+            action.allow_immediate = (request.get('poit.allow_immediate', None) == 'on')
 
         elif command in ['cancel', 'expire']:
             action.type = command
@@ -559,6 +576,9 @@ class CGIResponse(list):
         if self.type != 'error':
             if not session.authenticated:
                 self.append(HTML_FORM_PASSPHRASE)
+
+            if self.type in ['openid_authenticate']:
+                self.append(HTML_CB_REMEMBER)
 
             self.append(HTML_BUTTONS_START)
             if self.type in ['openid_authenticate', 'plain_authenticate']:
@@ -653,6 +673,8 @@ def handle_openid(session, server, request, response, action):
 
         if request.immediate:
             if session.authenticated:
+                realm = config.get_realm(request.trust_root)
+
                 if request.idSelect():
                     ids = config.get_identities()
                     if len(ids) == 1:
@@ -661,25 +683,34 @@ def handle_openid(session, server, request, response, action):
                         oid_response = True
                     else:
                         logger.info("REJECT (immediate): need identity selection")
-                else:
+                elif realm and realm.allow_immediate:
                     logger.info("ACCEPT (immediate)")
                     oid_response = True
+                else:
+                    logger.info("REJECT (immediate): not allowed")
             else:
                 logger.info("REJECT (immediate): no session")
         elif session.authenticated:
             if request.idSelect():
-                if action and config.validate_id(action.identity):
+                if action:
                     answer_id = action.identity
-                    oid_response = True
                 else:
                     logger.info("PROMPT: Need identity selection")
                     response.type = 'openid_authenticate'
                     return response
-            elif action:
-                if not config.validate_id(request.identity):
-                    logger.info("REJECT: Invalid ID: {0}".format(request.identity))
-                else:
+
+            if action:
+                id = answer_id if answer_id else request.identity
+                if config.validate_id(id):
                     oid_response = True
+
+                    # Handle realm profile changes
+                    realm = config.get_realm(request.trust_root)
+                    if not realm: realm = OpenIDRealm(request.trust_root)
+                    if realm.apply_action(action):
+                        config.save_realm(realm)
+                else:
+                    logger.info("REJECT: Invalid ID: {0}".format(id))
             else:
                 logger.info("PROMPT: checkid_setup mode")
                 response.type = 'openid_authenticate'
@@ -798,6 +829,7 @@ def cgi_main():
     else:
         handle_normal(session, response, action)
 
+    config.save()
     ostore.cleanup()
     response.output(session)
 
