@@ -697,6 +697,7 @@ def handle_openid(session, server, request, response, action):
                 else:
                     logger.info("PROMPT: Need identity selection")
                     response.type = 'openid_authenticate'
+                    response.identity = False
                     return response
 
             if action:
