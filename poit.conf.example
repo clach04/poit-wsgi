@@ -1,0 +1,37 @@
+## Example poit.conf file
+## 
+## Use this as a reference to modify your poit configuration after creating
+## a default one using poit in command line mode.
+##
+## NOTE: Before version 1.0, groups and keys may change names or be removed
+## without notice. Backwards compatibility will NOT be guaranteed.
+## CHECK THIS FILE AGAINST YOUR EXISTING CONFIGURATION WHEN UPGRADING.
+
+[security]
+# Duration of authenticated session in seconds; defaults to 21600
+#session_time = 21600
+
+# Special security handling. Set to 'none' or 'https'; defaults to 'none'
+#
+# https
+#   Use this mode if you want to use SSL with a self-signed certificate.
+#   Ensure your configured endpoint URL uses 'http://..' and not 'https://...'.
+#policy = none
+
+[server]
+# Set this if exposing the server at a URL different from the script itself
+#endpoint = http://domain.tld/openid
+
+# Location to store session information; defaults to '~/.cache/poit'
+#session_dir = '~/.cache/poit'
+
+[ui]
+# URL of stylesheet to use; defaults to './poit.css'
+#stylesheet = /~yzhao/poit/poit.css
+
+# Enable debugging output; cookie write does not work in this mode
+#debug = False
+
+# These two groups should not be modified manually. Use the command line tool.
+[ids]
+[passphrase]
