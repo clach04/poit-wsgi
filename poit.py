@@ -191,8 +191,8 @@ class ConfigManager():
         if self._parser.has_option("server", "endpoint"):
             self.endpoint = self._parser.get("server", "endpoint")
 
-        if self._parser.has_option("session", "timeout"):
-            self.timeout = self._parser.get("session", "timeout")
+        if self._parser.has_option('security', 'session_time'):
+            self.timeout = self._parser.get('security', 'session_time')
         else:
             self.timeout = 21600
 
