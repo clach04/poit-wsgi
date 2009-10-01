@@ -1,0 +1,45 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <title>OpenID Authentication Request</title>
+  <link rel="stylesheet" href="../poit.css" type="text/css" />
+</head>
+<body>
+
+
+<form action="passphrase.html" method="post" id="form_box">
+
+<p id="identity">http://yangman.ca/poit/</p>
+
+<p class="info">You are already logged in to poit.</p>
+<p class="info">You can now authenticate to OpenID-supporting sites without being asked for your
+passphrase again.</p>
+
+<div id="buttons">
+  <button type="submit" name="poit.action" value="logout">Logout</button>
+</div>
+
+<hr/>
+
+<table>
+<tr><td>Fullname</td><td>Yang Zhao</td></tr>
+<tr><td>Nickname</td><td>yangman</td></tr>
+<tr><td>Email</td><td>yang@yangman.ca</td></tr>
+<tr><td>Language</td><td>eng</td></tr>
+<tr><td>Gender</td><td>M</td></tr>
+<tr><td>Birthday</td><td></td></tr>
+<tr><td>Timezone</td><td>America/Vancouver</td></tr>
+<tr><td>Country</td><td>CA</td></tr>
+<tr><td>Postcode</td><td></td></tr>
+</table>
+                
+</form>
+
+<p id="version">poit 0.0_mockup</p>
+
+<script type="text/javascript">
+try{document.getElementById('passphrase_input').focus();}catch(e){}
+</script>
+
+</body>
+</html>
