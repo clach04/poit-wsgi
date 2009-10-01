@@ -1,0 +1,82 @@
+poit - Simple, personal OpenID
+==============================
+
+poit is a simple, single-user OpenID authentication server.  It is geared
+towards people that would like to have complete control over their OpenID
+identity and have it be as secure and as simple as possible.
+
+It was authored by Yang "yangman" Zhao (yang@yangman.ca)
+
+The latest versions of poit can be found at http://yangman.ca/poit/
+
+-----
+LEGAL
+-----
+poit.py is distributed under the terms of Apache License, Version 2.0.
+For full text of the license, see http://www.apache.org/licenses/LICENSE-2.0
+
+No restrictions are placed on the accompanying support files for poit:
+  - poit.css
+  - poit.conf.example
+
+You are free to do whatever you want with the above listed.
+
+-----------------------------
+REQUIREMENTS AND INSTALLATION
+-----------------------------
+poit requires python-2.6 with python-openid-2.x.x installed.
+python-openid can be obtained from http://openidenabled.com/python-openid/
+
+poit runs under any standard CGI environment, and is designed to work with
+suEXEC or any equivalent.  Although not strictly required, running poit as
+a standard user is _highly_ recommended as configuration and cache data
+default to being stored in '~/.config' and '~/.cache', respectively.
+
+To install poit, simply copy poit.py to a location where it will be executed
+as a CGI script.
+
+Optionally install the poit.css stylesheet file in the same directory, or in
+a location of your choice.  See poit.conf.example on configuring the stylesheet
+location.
+
+-----------------------
+SETUP AND CONFIGURATION
+-----------------------
+By default, poit requires a configuration file located at '~/.config/poit.conf'.
+If it is not found there, '~/.poit.conf' and './poit.conf' are then chcked,
+in that order.
+
+poit.py can also be executed on the command line as a configuration tool.
+
+To generate a new configuration file, run:
+
+  ./poit.py --add-identity=$OPENID_IDENTITY --passphrase
+
+See
+  ./poit.py --help
+for all valid options.
+
+Not all options are configurable using the command line tool, and must be
+done with a text editor.  See poit.conf.example for more information.
+
+Once you have a configuration file, go to the location poit was installed to
+in a browser and log in with your passphrase.  If it was configured correctly,
+your poit install is now ready to be used as an OpenID server.
+
+For instructions on setting up an OpenID identity to use a specific OpenID
+server, please consult your favourite Internet Search Engine.
+
+(I may write a guide of my own in the future and reference it here)
+
+----------------
+UI CUSTOMIZATION
+----------------
+You can configure poit to use any arbitrary CSS file for its UI.
+See the included poit.css file for id and class name references.
+
+-------------------------------
+BUGS, SUPPORT AND CONTRIBUTIONS
+-------------------------------
+- Email me at yang@yangman.ca, with "[poit]" in the subject line
+- Ping me on identi.ca (@yangman) or Twitter (@yangaroo)
+- Find me on IRC (nickname 'yangman') in #openid on irc.freenode.net
