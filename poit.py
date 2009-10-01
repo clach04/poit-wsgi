@@ -46,7 +46,7 @@ from openid.extensions.sreg import SRegRequest, SRegResponse
 from openid.store.filestore import FileOpenIDStore
 from openid.store.memstore import MemoryStore
 
-POIT_VERSION = "0.1_alpha"
+POIT_VERSION = "0.1"
 DEFAULT_CONFIG_FILES = [os.path.expanduser("~/.config/poit.conf"),
                         os.path.expanduser("~/.poit.conf"),
                         os.path.abspath("./poit.conf")]
