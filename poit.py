@@ -701,22 +701,23 @@ def handle_openid(session, server, request, response, action):
                     response.identity = False
                     return response
 
-            if action:
-                id = answer_id if answer_id else request.identity
-                if config.validate_id(id):
-                    oid_response = True
+            realm = config.get_realm(request.trust_root)
+            if not realm: realm = OpenIDRealm(request.trust_root, allow_immediate=False)
+            realm_modified = realm.apply_action(action) if action else False
 
-                    # Handle realm profile changes
-                    realm = config.get_realm(request.trust_root)
-                    if not realm: realm = OpenIDRealm(request.trust_root)
-                    if realm.apply_action(action):
-                        config.save_realm(realm)
-                else:
-                    logger.info("REJECT: Invalid ID: {0}".format(id))
+            if config.validate_id(answer_id if answer_id else request.identity):
+                oid_response = True
+                if not action and not realm.allow_immediate:
+                    logger.info("PROMPT: Need explicit authentication")
+                    response.type = 'openid_authenticate'
+                    if request.idSelect():
+                        response.identity = answer_id
+                    return response
+                # Save realm profile if needed
+                if realm_modified:
+                    config.save_realm(realm)
             else:
-                logger.info("PROMPT: checkid_setup mode")
-                response.type = 'openid_authenticate'
-                return response
+                logger.info("REJECT: Invalid ID: {0}".format(id))
         else:
             if not action or action.type == 'ask_again':
                 logger.info("PROMPT: {0} passphrase".format("Incorrect" if action else "Need"))
