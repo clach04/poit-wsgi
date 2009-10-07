@@ -608,7 +608,15 @@ class CGIResponse(list):
         pass
 
     def output(self, session, file=sys.stdout):
-        if self.type == 'no_config':
+        if self.type == 'openid_only':
+            print('Status: {0}'.format(self.response.code), file=file)
+            print('Content-Type: text/plain', file=file)
+            for (header, value) in self.response.headers:
+                print("{0}: {1}".format(header, value), file=file)
+            print('', file=file)
+            print(self.response.body)
+            return
+        elif self.type == 'no_config':
             print('status: 500 poit: No configuration file found', file=file)
             print('', file=file)
             return
@@ -747,6 +755,8 @@ def handle_openid(session, server, request, response, action):
             oid_response = server.OpenIDResponse(None)
             oid_response.fields['error'] = str(e)
             return
+        else:
+            response.type = 'openid_only'
 
     response.response = server.encodeResponse(oid_response)
     return response
