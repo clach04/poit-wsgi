@@ -28,14 +28,14 @@ form {
 }
 
 #realm_str {
-	font-size: 10pt;
+	font-size: 120%;
 	color: #355;
 	font-weight: bolder;
 	font-family: monospace;
 }
 
 #identity {
-	font-size: 8pt;
+	font-size: 100%;
 	color: #777;
 	font-weight: bolder;
 	font-family: monospace;
@@ -47,7 +47,7 @@ form {
 
 label, .label {
 	color: #777;
-	font-size: 8pt;
+	font-size: 80%;
 	font-weight: normal;
 }
 
@@ -58,7 +58,7 @@ input {
 }
 
 button {
-	font-size: 10pt;
+	font-size: 120%;
 	padding: 5px;
 	margin: 5px;
 }
@@ -70,7 +70,7 @@ button {
 
 #error {
 	color: #600;
-	font-size: 8pt;
+	font-size: 100%;
 	font-weight: bold;
 	font-variant: small-caps;
 	margin: 0 2em;
@@ -87,13 +87,13 @@ button {
 }
 
 #version {
-	font-size: 6pt;
+	font-size: 60%;
 	color: #777;
 	text-align: right;
 }
 
 #debug {
-	font-size: 6pt;
+	font-size: 70%;
 	background: #ffe;
 	color: #444;
 	border: 1px #000 solid;
