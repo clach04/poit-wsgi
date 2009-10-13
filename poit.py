@@ -858,8 +858,6 @@ def setup_option_parser():
                       help="Add a new identity")
     parser.add_option("-p", "--passphrase", action="store_true", dest="passphrase",
                       help="Set a new passphrase")
-    parser.add_option("--endpoint", dest="endpoint",
-                      help='Set server endpoint URL; clear by setting to ""')
     parser.add_option("--security", dest="policy",
                       type="choice", choices=["none", "https"],
                       help="Set server's security policy: none or https")
@@ -907,14 +905,6 @@ def cli_main():
 
     print("Using {0}".format(config_file))
     config = ConfigManager(config_file)
-
-    if options.endpoint is not None:
-        no_opts = False
-        config.set_endpoint(options.endpoint, save_to_file=True)
-        if options.endpoint:
-            print("Server endpoint is now: " + options.endpoint)
-        else:
-            print("Server endpoint unset")
 
     if options.new_identity:
         no_opts = False
