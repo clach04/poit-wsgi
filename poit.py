@@ -18,6 +18,7 @@ import struct
 import sys
 import urllib
 import pprint
+from collections import Callable
 from datetime import datetime
 from optparse import OptionParser, OptionValueError
 
@@ -149,6 +150,11 @@ class OpenIDRealm():
 
 class ConfigManager():
     '''Manages configuration, profile and session information'''
+    # Semantic: <section>: {<item>: (<type>, <default_value>),...}
+    CONFIG_DEFAULTS = {
+        'server': {'endpoint': (str, None), 'session_dir': (str, "~/.cache/poit/")},
+        'ui': {'stylesheet': (str, DEFAULT_STYLESHEET), 'debug': (bool, False)},
+        'security': {'session_time': (int, 21600), 'policy': (str, 'none')}}
 
     @classmethod
     def find_config_file(cls):
@@ -165,10 +171,8 @@ class ConfigManager():
         '''Constructor
         '''
         self.config_file = config_file
-        self.session_dir = None
-        self.endpoint = None
-        self.debug = False
 
+        self._unsaved_options = {}
         self._keys_exist = False
         self._dirty = False
         self._parser = None
@@ -180,6 +184,7 @@ class ConfigManager():
         for s in ["passphrase", "server", "ids", "ui", "security"]:
             try: self._parser.add_section(s)
             except configparser.DuplicateSectionError: pass
+            self._unsaved_options[s] = {}
 
         # Sanity check values
         self._keys_exist = self._parser.has_option("passphrase", "md5") and \
@@ -188,23 +193,11 @@ class ConfigManager():
         if not self._keys_exist:
             logger.warning("Passphrase not set")
 
-        if self._parser.has_option("server", "endpoint"):
-            self.endpoint = self._parser.get("server", "endpoint")
-
-        if self._parser.has_option('security', 'session_time'):
-            self.timeout = self._parser.get('security', 'session_time')
-        else:
-            self.timeout = 21600
-
-        if self._parser.has_option("ui", "debug"):
-            self.debug = self._parser.getboolean("ui", "debug")
+        self.timeout = self.get_option('security', 'session_time')
+        self.debug = self.get_option('ui', 'debug')
 
         # Session folder
-        try:
-            self.session_dir = self._parser.get("server", "session_dir")
-        except (configparser.NoSectionError, configparser.NoOptionError):
-            self.session_dir = os.path.expanduser("~/.cache/poit/")
-
+        self.session_dir = os.path.expanduser(self.get_option('server', 'session_dir'))
         # FIXME: on OpenID request, reply with error
         if not self.check_session_dir():
             raise IOError("Session directory not writable: " + self.session_dir)
@@ -218,17 +211,36 @@ class ConfigManager():
         with open(self.config_file, 'w') as f:
             self._parser.write(f)
 
-    def set_endpoint(self, url, save_to_file=False):
-        '''If url is empty, change attribute iff save_to_file is True'''
-        if save_to_file:
-            if url:
-                self.endpoint = url
-                self._parser.set("server", "endpoint", url)
+    def get_option(self, section, option):
+        try:
+            type, default = self.CONFIG_DEFAULTS[section][option]
+        except KeyError:
+            raise KeyError("No such option: {0}.{1}".format(section, option))
+
+        try:
+            return self._unsaved_options[section][option]
+        except KeyError:
+            if self._parser.has_option(section, option):
+                if type == str:
+                    return self._parser.get(section, option)
+                elif type == int:
+                    return self._parser.getint(section, option)
+                elif type == bool:
+                    return self._parser.getboolean(section, option)
             else:
-                self._parser.remove_option("server", "endpoint")
+                return default() if isinstance(default, Callable) else default
+
+    def set_option(self, section, option, value, save=True):
+        try:
+            type, default = self.CONFIG_DEFAULTS[section][option]
+        except KeyError:
+            raise KeyError("No such option: {0}.{1}".format(section, option))
+
+        if save:
+            self._parser.set(section, option, value)
             self._dirty = True
         else:
-            self.endpoint = url
+            self._unsaved_options[section][option] = value
 
     def validate_passphrase(self, passphrase):
         if not (self._keys_exist and passphrase): return False
@@ -315,19 +327,8 @@ class ConfigManager():
         logger.debug("Cookie value: " + val)
         return val
 
-    def set_security_policy(self, policy):
-        # XXX: assumes input is valid value
-        self._parser.set("security", "policy", policy)
-        self._dirty = True
-
-    def get_security_policy(self):
-        if self._parser.has_option("security", "policy"):
-            return self._parser.get("security", "policy")
-        else:
-            return "none"
-
     def force_https(self):
-        return self.get_security_policy() == "https"
+        return self.get_option('security', 'policy') == "https"
 
     def check_session_dir(self):
         '''Check that session storage directory exists has correct permissions'''
@@ -339,12 +340,6 @@ class ConfigManager():
                 logger.error("Cannot create {dir}: {e}".format(self.session_dir, str(e)))
                 return False
         return True
-
-    def get_stylesheet(self):
-        try:
-            return self._parser.get('ui', 'stylesheet')
-        except (configparser.NoOptionError, configparser.NoSectionError):
-            return DEFAULT_STYLESHEET
 
     def sreg_fields(self):
         return dict(self._parser.items("sreg")) if self._parser.has_section("sreg") else None
@@ -461,7 +456,7 @@ class Session:
         if not self._cookie:
             self._cookie = cookies.SimpleCookie()
 
-        endpoint = urlparse.urlparse(config.endpoint)
+        endpoint = urlparse.urlparse(config.get_option('server', 'endpoint'))
 
         self._cookie["poit_session"] = (config.create_cookie_val() if timeout else '')
         val = self._cookie["poit_session"]
@@ -532,9 +527,9 @@ class CGIResponse(list):
         self.headers = {}
 
     def _build_body(self, session):
-        self.append(HTML_HEADER.format(stylesheet=config.get_stylesheet()))
+        self.append(HTML_HEADER.format(stylesheet=config.get_option('ui', 'stylesheet')))
 
-        form_action = config.endpoint
+        form_action = config.get_option('server', 'endpoint')
         if session.is_secure():
             form_action = re.sub("^http:", "https:", form_action)
 
@@ -799,12 +794,14 @@ def cgi_main():
 
     if config:
         # Make sure an endpoint is set
-        if not config.endpoint:
-            config.set_endpoint(cgi_request.self_uri(https=config.force_https()))
+        endpoint = config.get_option('server', 'endpoint')
+        if not endpoint:
+            endpoint = cgi_request.self_uri(https=config.force_https())
+            config.set_option('server', 'endpoint', endpoint, save=False)
 
-        logger.debug("Endpoint: " + config.endpoint)
+        logger.debug("Endpoint: " + endpoint)
         ostore = FileOpenIDStore(config.session_dir)
-        oserver = OpenIDServer(ostore, config.endpoint)
+        oserver = OpenIDServer(ostore, endpoint)
         logger.debug("Initialized server")
     else:
         # Stilll need to create a OpenIDServer to parse the request
@@ -825,7 +822,7 @@ def cgi_main():
     if (not session.is_secure()) and config.force_https() and \
             ((not request) or type(request) == CheckIDRequest):
         response.redirect_url = "{endpoint}?{fields}".format(
-                    endpoint = re.sub("^http:", "https:", config.endpoint),
+                    endpoint = re.sub("^http:", "https:", endpoint),
                     fields = urllib.urlencode(cgi_request.openid))
         response.output(session)
         return
@@ -914,7 +911,7 @@ def cli_main():
 
     if options.policy:
         no_opts = False
-        config.set_security_policy(options.policy)
+        config.set_option('security', 'policy', options.policy)
         print("Setting security policy to: {0}".format(options.policy))
 
     if options.passphrase:
