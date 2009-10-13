@@ -197,10 +197,10 @@ class ConfigManager():
         self.debug = self.get_option('ui', 'debug')
 
         # Session folder
-        self.session_dir = os.path.expanduser(self.get_option('server', 'session_dir'))
+        session_dir = os.path.expanduser(self.get_option('server', 'session_dir'))
         # FIXME: on OpenID request, reply with error
-        if not self.check_session_dir():
-            raise IOError("Session directory not writable: " + self.session_dir)
+        if not self.check_session_dir(session_dir):
+            raise IOError("Session directory not writable: " + session_dir)
 
     def save(self):
         '''Saves configuration to file. Assumes config_file is set.'''
@@ -330,14 +330,15 @@ class ConfigManager():
     def force_https(self):
         return self.get_option('security', 'policy') == "https"
 
-    def check_session_dir(self):
+    @classmethod
+    def check_session_dir(cls, dir):
         '''Check that session storage directory exists has correct permissions'''
         # TODO: sanity check permissions when pre-existing
-        if not os.path.exists(self.session_dir):
+        if not os.path.exists(dir):
             try:
-                os.makedirs(self.session_dir, 0x1C0) # 0x1C0 = 0o700
+                os.makedirs(dir, 0x1C0) # 0x1C0 = 0o700
             except OSError as e:
-                logger.error("Cannot create {dir}: {e}".format(self.session_dir, str(e)))
+                logger.error("Cannot create {dir}: {e}".format(dir, str(e)))
                 return False
         return True
 
@@ -800,7 +801,7 @@ def cgi_main():
             config.set_option('server', 'endpoint', endpoint, save=False)
 
         logger.debug("Endpoint: " + endpoint)
-        ostore = FileOpenIDStore(config.session_dir)
+        ostore = FileOpenIDStore(config.get_option('server', 'session_dir'))
         oserver = OpenIDServer(ostore, endpoint)
         logger.debug("Initialized server")
     else:
