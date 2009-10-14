@@ -237,6 +237,10 @@ class ConfigManager():
             raise KeyError("No such option: {0}.{1}".format(section, option))
 
         if save:
+            # Unset unsaved value
+            try: del self._unsaved_options[section][option]
+            except KeyError: pass
+
             self._parser.set(section, option, value)
             self._dirty = True
         else:
