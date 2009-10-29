@@ -9,6 +9,7 @@ import cgi
 import base64
 import getpass
 import hashlib
+import hmac
 import logging
 import logging.handlers
 import os
@@ -288,21 +289,20 @@ class ConfigManager():
         return self._parser.get("passphrase", hash)
 
     # Session Cookie methods
-    # TODO: Implement a version using symmetric-key block cipher
-    def _cookie_hash(self, salt, time):
-        h = hashlib.sha512()
+    def _cookie_hash(self, time, msg):
+        key = reduce(lambda acum, x: acum + base64.b64decode(self._parser.get("passphrase", x)),
+            ["sha512", "md5"], '')
+        h = hmac.new(key, digestmod=hashlib.sha512)
         # FIXME: check for hashes not being available?
-        h.update(salt)
         h.update(time)
-        h.update(self._parser.get("passphrase", "md5"))
-        h.update(self._parser.get("passphrase", "sha512"))
+        h.update(msg)
         return h.digest()
 
     def validate_cookie_val(self, val):
         vals = val.split(":")
         try:
-            salt = base64.b64decode(vals[0])
-            time_str = vals[1]
+            time_str = vals[0]
+            msg = base64.b64decode(vals[1])
             hash = base64.b64decode(vals[2])
         except (IndexError, TypeError):
             logger.warn("Malformed cookie value: " + val)
@@ -318,16 +318,18 @@ class ConfigManager():
         elif diff > self.timeout:
             logger.warn("Cookie timed out")
             return False
-
-        return self._cookie_hash(salt, time_str) == hash
+        elif not self._cookie_hash(time_str, msg) == hash:
+            logger.warn("Cookie hash not valid")
+            return False
+        return True
 
     def create_cookie_val(self):
-        salt = struct.pack("34B", *(random.randint(0,255) for x in range(34)))
+        msg = struct.pack("33B", *(random.randint(0,255) for x in range(33)))
         time = datetime.utcnow().strftime("%Y%m%d%H%M%S")
 
-        hash = self._cookie_hash(salt, time)
+        hash = self._cookie_hash(time, msg)
 
-        val = "{0}:{1}:{2}".format(base64.b64encode(salt), time, base64.b64encode(hash))
+        val = "{0}:{1}:{2}".format(time, base64.b64encode(msg), base64.b64encode(hash))
         logger.debug("Cookie value: " + val)
         return val
 
