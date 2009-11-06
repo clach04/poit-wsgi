@@ -134,7 +134,7 @@ logger.setLevel(logging.DEBUG)
 
 config = None
 
-class OpenIDRealm():
+class OpenIDRealm(object):
     def __init__(self, url, allow_immediate=False):
         self.url = url
         self.allow_immediate = allow_immediate
@@ -149,7 +149,7 @@ class OpenIDRealm():
         return changed
 
 
-class ConfigManager():
+class ConfigManager(object):
     '''Manages configuration, profile and session information'''
     # Semantic: <section>: {<item>: (<type>, <default_value>),...}
     CONFIG_DEFAULTS = {
@@ -377,7 +377,7 @@ class ConfigManager():
 #######################################
 # CGI functions
 
-class CGIParser():
+class CGIParser(object):
     '''Similar to cgi.FieldStorage, but specific to this script
 
     Instanciate once only, as sys.stdin is read.
@@ -429,7 +429,7 @@ class CGIParser():
                     uri = os.environ["SCRIPT_NAME"])
 
 
-class Session:
+class Session(object):
     def __init__(self, cgi_request):
         logger.debug("Initializing session object")
         self.cgi_request = cgi_request
@@ -481,7 +481,7 @@ class Session:
         return self._cookie.output() if self._cookie else ""
 
 
-class PoitAction:
+class PoitAction(object):
     def __init__(self):
         self.type = None
         self.identity = None
