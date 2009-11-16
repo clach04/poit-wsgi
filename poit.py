@@ -715,7 +715,8 @@ def handle_openid(session, server, request, response, action):
             if not realm: realm = OpenIDRealm(request.trust_root, allow_immediate=False)
             realm_modified = realm.apply_action(action) if action else False
 
-            if config.validate_id(answer_id if answer_id else request.identity):
+            id = answer_id if answer_id else request.identity
+            if config.validate_id(id):
                 oid_response = True
                 if not action and not realm.allow_immediate:
                     logger.info("PROMPT: Need explicit authentication")
