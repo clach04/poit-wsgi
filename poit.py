@@ -888,6 +888,9 @@ def cli_main():
         r = raw_input("Crate new configuration file at {0}? [Y/n]: ".format(path))
         r = r.lower() if r else "y"
         if r[0] == "y":
+            dir_path = os.path.dirname(path)
+            if not os.path.exists(dir_path):
+                os.makedirs(dir_path, 0x1C0)
             config_file = DEFAULT_CONFIG_FILES[0]
             with open(config_file, 'w'): pass
             return True
