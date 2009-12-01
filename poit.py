@@ -49,9 +49,7 @@ from openid.store.filestore import FileOpenIDStore
 from openid.store.memstore import MemoryStore
 
 POIT_VERSION = "0.1"
-DEFAULT_CONFIG_FILES = [os.path.expanduser("~/.config/poit.conf"),
-                        os.path.expanduser("~/.poit.conf"),
-                        os.path.abspath("./poit.conf")]
+DEFAULT_CONFIG_FILE = os.path.expanduser("~/.config/poit.conf")
 DEFAULT_STYLESHEET = './poit.css'
 
 CONFIG_REALM_PREFIX = 'realm|'
@@ -159,14 +157,19 @@ class ConfigManager(object):
 
     @classmethod
     def find_config_file(cls):
-        file = None
-        for f in DEFAULT_CONFIG_FILES:
-            if not os.path.exists(f):
-                logger.debug("`{0}' does not exist".format(f))
-                continue
-            file = f
-            break
-        return file
+        if 'POIT_CONFIG_FILE' in os.environ:
+            env_configfile = os.environ['POIT_CONFIG_FILE']
+            if os.path.exists(env_configfile):
+                return os.environ[env_configfile]
+            else:
+                logger.warn("`{0}' does not exist".format(env_configfile))
+
+        # XXX: Be strict about env var and bail here?
+
+        if os.path.exists(DEFAULT_CONFIG_FILE):
+            return DEFAULT_CONFIG_FILE
+        logger.debug("`{0}' does not exist".format(DEFAULT_CONFIG_FILE))
+        return None
 
     def __init__(self, config_file):
         '''Constructor
@@ -891,7 +894,7 @@ def cli_main():
             dir_path = os.path.dirname(path)
             if not os.path.exists(dir_path):
                 os.makedirs(dir_path, 0x1C0)
-            config_file = DEFAULT_CONFIG_FILES[0]
+            config_file = DEFAULT_CONFIG_FILE
             with open(config_file, 'w'): pass
             return True
         else:
@@ -906,7 +909,7 @@ def cli_main():
     else:
         config_file = ConfigManager.find_config_file()
         if not config_file:
-            config_file = DEFAULT_CONFIG_FILES[0]
+            config_file = DEFAULT_CONFIG_FILE
             print("No configuration file found")
             if not new_file_prompt(config_file):
                 sys.exit(0)
