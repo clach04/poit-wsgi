@@ -160,7 +160,7 @@ class ConfigManager(object):
         if 'POIT_CONFIG_FILE' in os.environ:
             env_configfile = os.environ['POIT_CONFIG_FILE']
             if os.path.exists(env_configfile):
-                return os.environ[env_configfile]
+                return env_configfile
             else:
                 logger.warn("`{0}' does not exist".format(env_configfile))
 
