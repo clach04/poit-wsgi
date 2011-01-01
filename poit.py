@@ -811,7 +811,7 @@ def cgi_main():
             config.set_option('server', 'endpoint', endpoint, save=False)
 
         logger.debug("Endpoint: " + endpoint)
-        ostore = FileOpenIDStore(config.get_option('server', 'session_dir'))
+        ostore = FileOpenIDStore(os.path.expanduser(config.get_option('server', 'session_dir')))
         oserver = OpenIDServer(ostore, endpoint)
         logger.debug("Initialized server")
     else:
