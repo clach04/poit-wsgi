@@ -4,7 +4,7 @@ d="poit-${version}"
 f="${d}.tar.bz2"
 
 echo Making $f
-if [[ ! -d dist ]]; then
+if [ ! -d dist ]; then
   mkdir dist || exit 1
 fi
 cd dist
