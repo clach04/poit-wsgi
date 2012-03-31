@@ -42,18 +42,28 @@ location.
 -----------------------
 SETUP AND CONFIGURATION
 -----------------------
+
+Setup
+
+Simply copy poit.py into a location where .py files are executed as CGI scripts,
+and use its location as an OpenID 2.0 endpoint URL.
+
+
 By default, poit requires a configuration file located at '~/.config/poit.conf'.
 If it is not found there, '~/.poit.conf' and './poit.conf' are then chcked,
 in that order.
 
 poit.py can also be executed on the command line as a configuration tool.
 
-To generate a new configuration file, run:
+To create an initial configuration, execute poit.py from the command line
+and specify a new identity and passphrase. For example, to use
+http://mydomain.tld/ as your identity, run:
 
-  ./poit.py --add-identity=$OPENID_IDENTITY --passphrase
+
+    ./poit.py --add-identity=http://mydomain.tld --passphrase
 
 See
-  ./poit.py --help
+    ./poit.py --help
 for all valid options.
 
 Not all options are configurable using the command line tool, and must be
