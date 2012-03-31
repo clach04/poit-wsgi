@@ -48,7 +48,7 @@ from openid.extensions.sreg import SRegRequest, SRegResponse
 from openid.store.filestore import FileOpenIDStore
 from openid.store.memstore import MemoryStore
 
-POIT_VERSION = "0.1"
+POIT_VERSION = "0.2"
 DEFAULT_CONFIG_FILE = os.path.expanduser("~/.config/poit.conf")
 DEFAULT_STYLESHEET = './poit.css'
 
@@ -61,6 +61,8 @@ HTML_HEADER = '''<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w
 <html><head>
   <title>poit OpenID Server</title>
   <link rel="stylesheet" href="{stylesheet}" type="text/css" />
+  <link rel="openid.server" href="{openid_server_url}">
+  <link rel="openid.delegate" href="{openid_server_url}">
 </head><body>
 '''
 
@@ -537,7 +539,9 @@ class CGIResponse(list):
         self.headers = {}
 
     def _build_body(self, session):
-        self.append(HTML_HEADER.format(stylesheet=config.get_option('ui', 'stylesheet')))
+        # horrible determine used URL, ideally pick up from config
+        openid_server_url = 'http://' + os.environ.get('HTTP_HOST') + os.environ.get('REQUEST_URI')
+        self.append(HTML_HEADER.format(stylesheet=config.get_option('ui', 'stylesheet'), openid_server_url=openid_server_url))
 
         form_action = config.get_option('server', 'endpoint')
         if session.is_secure():
