@@ -7,10 +7,19 @@ echo Making $f
 if [ ! -d dist ]; then
   mkdir dist || exit 1
 fi
+
+
+echo cleaning pyc files
+cd openid
+rm `find . -name \*\.pyc`
+cd ..
+
+
 cd dist
 rm -rf $d
 mkdir $d
 cp ../poit.py ../poit.css ../poit.conf.example ../README $d
+cp -R ../openid $d
 
 tar -cjf $f $d
 md5sum $f > "${f}.md5"
