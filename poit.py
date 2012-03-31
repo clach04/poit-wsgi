@@ -539,7 +539,7 @@ class CGIResponse(list):
         self.headers = {}
 
     def _build_body(self, session):
-        # horrible determine used URL, ideally pick up from config
+        # horrible determine used URL, ideally pick up from config (i.e. endpoint)
         openid_server_url = 'http://' + os.environ.get('HTTP_HOST') + os.environ.get('REQUEST_URI')
         self.append(HTML_HEADER.format(stylesheet=config.get_option('ui', 'stylesheet'), openid_server_url=openid_server_url))
 
